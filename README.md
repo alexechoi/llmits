@@ -2,7 +2,7 @@
 
 See how much of your Claude and ChatGPT plans you've used, right in your Mac's menu bar.
 
-<img src="docs/screenshot.png" alt="The menu bar shows a red exclamation ring at 100%. Its menu has a Claude Max 20x section (5-hour session not started; weekly all models 62%, resets Wednesday, ahead of pace; weekly Fable 100% in red) and a ChatGPT Pro Lite section (weekly 35%, resets Tuesday, on track), then Refresh, Launch at Login and Quit." width="320">
+<img src="docs/screenshot.png" alt="The menu bar shows a red exclamation ring at 100%. Its menu has a Claude Max 20x section (5-hour session not started; weekly all models 62%, resets Wednesday, ahead of pace; weekly Fable 100% in red) and a ChatGPT Pro 100 section (weekly 35%, resets Tuesday, on track), then Refresh, Launch at Login and Quit." width="320">
 
 ## Install
 

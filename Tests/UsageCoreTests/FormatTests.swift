@@ -106,11 +106,18 @@ import Testing
     }
 
     @Test func chatGPTPlans() {
-        #expect(Format.chatGPTPlan("prolite") == "Pro Lite")
+        // The labels Codex's own status screen uses.
+        #expect(Format.chatGPTPlan("prolite") == "Pro 100")
+        #expect(Format.chatGPTPlan("pro") == "Pro 200")
+        #expect(Format.chatGPTPlan("promax") == "Pro 500")
         #expect(Format.chatGPTPlan("plus") == "Plus")
+        #expect(Format.chatGPTPlan("team") == "Business")
+        #expect(Format.chatGPTPlan("business") == "Enterprise")
+        #expect(Format.chatGPTPlan("self_serve_business_prolite") == "Business Premium")
         #expect(Format.chatGPTPlan("ent26") == "Enterprise")
-        #expect(Format.chatGPTPlan("self_serve_business_usage_based") == "Business")
-        #expect(Format.chatGPTPlan("some_new_plan") == "Some New Plan")
+        #expect(Format.chatGPTPlan("PROLITE") == "Pro 100")
+        // An unknown plan gets no name rather than a guess.
+        #expect(Format.chatGPTPlan("some_new_plan") == nil)
         #expect(Format.chatGPTPlan(nil) == nil)
     }
 

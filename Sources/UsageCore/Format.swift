@@ -135,19 +135,39 @@ public enum Format {
         return name
     }
 
-    /// A ChatGPT plan's display name: "Pro Lite" from `prolite`, "Plus" from `plus`.
+    /// A ChatGPT plan's display name, e.g. "Pro 100" for `prolite`.
+    ///
+    /// The usage endpoint only sends an identifier, and the names don't follow from it, so this
+    /// mirrors the labels the Codex CLI shows in its own status screen
+    /// (`codex-rs/tui/src/subscription.rs`). Unknown plans get no name rather than a guess.
     public static func chatGPTPlan(_ planType: String?) -> String? {
         guard let raw = planType?.lowercased(), !raw.isEmpty else { return nil }
-        let known = [
-            "free": "Free", "go": "Go", "plus": "Plus", "pro": "Pro", "prolite": "Pro Lite", "promax": "Pro Max",
-            "team": "Team", "business": "Business", "enterprise": "Enterprise", "edu": "Edu", "education": "Edu",
-            "k12": "K-12", "free_workspace": "Free Workspace", "guest": "Guest",
-        ]
-        if let name = known[raw] { return name }
-        if raw.hasPrefix("ent") { return "Enterprise" }
-        if raw.contains("business") { return "Business" }
-        return limitName(raw).split(separator: " ").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
+        return chatGPTPlanNames[raw]
     }
+
+    private static let chatGPTPlanNames: [String: String] = [
+        "free": "Free",
+        "go": "Go",
+        "plus": "Plus",
+        "pro": "Pro 200",
+        "prolite": "Pro 100",
+        "promax": "Pro 500",
+        "team": "Business",
+        "self_serve_business_usage_based": "Business",
+        "self_serve_business_prolite": "Business Premium",
+        "business": "Enterprise",
+        "enterprise": "Enterprise",
+        "hc": "Enterprise",
+        "ent26": "Enterprise",
+        "enterprise_cbp_usage_based": "Enterprise",
+        "enterprise_cbp_automation": "Enterprise (Automation)",
+        "edu": "Edu",
+        "education": "Edu",
+        "edu_plus": "Edu Plus",
+        "edu_pro": "Edu Pro",
+        "sci": "Academic Researchers",
+        "sci_plus": "Academic Researchers Plus",
+    ]
 
     /// "Session (5h)", "Daily", "Weekly" or "Monthly" for a usage window's length.
     public static func windowName(seconds: Int?) -> String {

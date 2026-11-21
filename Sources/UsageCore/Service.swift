@@ -26,7 +26,7 @@ public enum Service: String, CaseIterable, Sendable, Identifiable {
 /// One service's limits as they were when fetched.
 public struct ServiceUsage: Sendable, Equatable {
     public var service: Service
-    /// The plan's display name, e.g. "Max 20x" or "Pro Lite".
+    /// The plan's display name, e.g. "Max 20x" or "Pro 100".
     public var plan: String?
     public var rows: [LimitRow]
 

@@ -28,7 +28,7 @@ private func rows(_ json: String) throws -> [LimitRow] {
 @Suite struct ChatGPTUsageTests {
     @Test func weeklyPlanLimit() throws {
         let usage = try ChatGPTUsageResponse.decode(Data(sample.utf8))
-        #expect(Format.chatGPTPlan(usage.planType) == "Pro Lite")
+        #expect(Format.chatGPTPlan(usage.planType) == "Pro 100")
         let rows = usage.rows(now: now)
         #expect(rows.map(\.title) == ["Weekly"])
         #expect(rows.map(\.percent) == [35])
@@ -116,7 +116,7 @@ private func rows(_ json: String) throws -> [LimitRow] {
             return
         }
         #expect(usage.service == .chatGPT)
-        #expect(usage.plan == "Pro Lite")
+        #expect(usage.plan == "Pro 100")
         #expect(usage.rows.map(\.percent) == [35])
     }
 
