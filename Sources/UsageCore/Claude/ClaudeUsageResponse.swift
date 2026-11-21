@@ -5,7 +5,7 @@ import Foundation
 ///
 /// Only the fields this app uses are modelled, and decoding is deliberately forgiving: unknown
 /// fields are ignored and malformed entries are dropped rather than failing the whole response.
-public struct UsageResponse: Sendable, Equatable {
+public struct ClaudeUsageResponse: Sendable, Equatable {
     /// The 5-hour session window; `nil` when no session is in progress.
     public var fiveHour: Window?
     public var sevenDay: Window?
@@ -31,14 +31,78 @@ public struct UsageResponse: Sendable, Equatable {
         public var scopeName: String?
     }
 
-    public static func decode(_ data: Data) throws -> UsageResponse {
+    public static func decode(_ data: Data) throws -> ClaudeUsageResponse {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(UsageResponse.self, from: data)
+        return try decoder.decode(ClaudeUsageResponse.self, from: data)
+    }
+
+    /// One row per limit, with the session first and always present.
+    public func rows(now: Date = .now) -> [LimitRow] {
+        let limits = limits ?? []
+        var rows: [LimitRow] = []
+
+        if let session = limits.first(where: { $0.kind == "session" }) {
+            rows.append(Self.row(for: session, id: "session"))
+        } else {
+            rows.append(Self.row(id: "session", title: "Session (5h)", window: fiveHour))
+        }
+
+        if limits.isEmpty {
+            // Older response shape, without `limits`.
+            let legacy: [(id: String, title: String, window: Window?)] = [
+                ("seven_day", "Weekly · all models", sevenDay),
+                ("seven_day_opus", "Weekly · Opus", sevenDayOpus),
+                ("seven_day_sonnet", "Weekly · Sonnet", sevenDaySonnet),
+            ]
+            for entry in legacy where entry.window != nil {
+                rows.append(Self.row(id: entry.id, title: entry.title, window: entry.window))
+            }
+        } else {
+            for (index, limit) in limits.enumerated() where limit.kind != "session" {
+                rows.append(Self.row(for: limit, id: "\(limit.kind)-\(index)"))
+            }
+        }
+
+        return rows.map { $0.rolledOver(at: now) }
+    }
+
+    static func title(for limit: Limit) -> String {
+        switch limit.kind {
+        case "session":
+            return "Session (5h)"
+        case "weekly_all":
+            return "Weekly · all models"
+        case "weekly_scoped":
+            return "Weekly · \(limit.scopeName ?? "scoped")"
+        default:
+            let name = Format.limitName(limit.group ?? limit.kind)
+            return limit.scopeName.map { "\(name) · \($0)" } ?? name
+        }
+    }
+
+    private static func row(for limit: Limit, id: String) -> LimitRow {
+        LimitRow(
+            id: id,
+            title: title(for: limit),
+            percent: limit.percent,
+            resetsAt: limit.resetsAt,
+            severity: Severity(serverValue: limit.severity, percent: limit.percent)
+        )
+    }
+
+    private static func row(id: String, title: String, window: Window?) -> LimitRow {
+        LimitRow(
+            id: id,
+            title: title,
+            percent: window?.utilization,
+            resetsAt: window?.resetsAt,
+            severity: Severity(percent: window?.utilization)
+        )
     }
 }
 
-extension UsageResponse: Decodable {
+extension ClaudeUsageResponse: Decodable {
     private enum CodingKeys: String, CodingKey {
         case fiveHour, sevenDay, sevenDayOpus, sevenDaySonnet, limits
     }
@@ -53,7 +117,7 @@ extension UsageResponse: Decodable {
     }
 }
 
-extension UsageResponse.Window: Decodable {
+extension ClaudeUsageResponse.Window: Decodable {
     private enum CodingKeys: String, CodingKey {
         case utilization, resetsAt
     }
@@ -65,7 +129,7 @@ extension UsageResponse.Window: Decodable {
     }
 }
 
-extension UsageResponse.Limit: Decodable {
+extension ClaudeUsageResponse.Limit: Decodable {
     private enum CodingKeys: String, CodingKey {
         case kind, group, percent, severity, resetsAt, scope
     }
@@ -98,36 +162,5 @@ extension UsageResponse.Limit: Decodable {
         }
         let named = container.lenient(Named.self, key)
         return named?.displayName ?? named?.id
-    }
-}
-
-extension KeyedDecodingContainer {
-    /// Decodes a value if it's present and well-formed; anything else becomes `nil`.
-    func lenient<T: Decodable>(_ type: T.Type, _ key: Key) -> T? {
-        try? decodeIfPresent(type, forKey: key)
-    }
-}
-
-/// Wraps an array element so that one malformed entry doesn't fail the whole array.
-struct Lossy<Value: Decodable>: Decodable {
-    var value: Value?
-
-    init(from decoder: any Decoder) throws {
-        value = try? Value(from: decoder)
-    }
-}
-
-enum ISODate {
-    /// Parses timestamps such as `2026-11-25T05:00:00.204008+00:00`.
-    static func parse(_ string: String) -> Date? {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: string) {
-            return date
-        }
-        // ISO8601DateFormatter can reject microsecond precision, so retry without the fraction.
-        formatter.formatOptions = [.withInternetDateTime]
-        let trimmed = string.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
-        return formatter.date(from: trimmed)
     }
 }

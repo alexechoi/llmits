@@ -23,14 +23,15 @@ extension Severity {
     }
 }
 
-/// The menu bar icon: an SF Symbol whose ring fills with usage (Variable Draw, macOS 26 and later).
+/// The menu bar icon: a ring that fills with usage (SF Symbols Variable Draw, macOS 26 and
+/// later) around a diamond, echoing the usage icon in the ChatGPT app.
 enum StatusIcon {
     static func image(fraction: Double, severity: Severity, tint: NSColor?) -> NSImage {
         // A distinct glyph at critical, so the state never depends on colour alone.
-        let name = severity == .critical ? "exclamationmark.circle" : "asterisk.circle"
+        let name = severity == .critical ? "exclamationmark.circle" : "diamond.circle"
         let value = min(max(fraction, 0), 1)
-        let symbol = NSImage(systemSymbolName: name, variableValue: value, accessibilityDescription: "Claude usage")
-            ?? NSImage(systemSymbolName: "circle", accessibilityDescription: "Claude usage")!
+        let symbol = NSImage(systemSymbolName: name, variableValue: value, accessibilityDescription: "Usage limits")
+            ?? NSImage(systemSymbolName: "circle", accessibilityDescription: "Usage limits")!
 
         // Weight-matched to the menu bar's text, at the large scale for emphasis.
         var config = NSImage.SymbolConfiguration(

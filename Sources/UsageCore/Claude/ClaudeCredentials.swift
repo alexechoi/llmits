@@ -1,7 +1,7 @@
 import Foundation
 
 /// The subset of Claude Code's stored OAuth credentials this app needs.
-public struct Credentials: Sendable, Equatable {
+public struct ClaudeCredentials: Sendable, Equatable {
     public var accessToken: String
     public var expiresAt: Date?
     public var subscriptionType: String?
@@ -14,19 +14,14 @@ public struct Credentials: Sendable, Equatable {
     }
 }
 
-public enum CredentialError: Error, Equatable {
-    case notFound
-    case malformed
-}
-
 /// Reads the credentials Claude Code stores after `/login`.
 ///
 /// Strictly read-only: this app never refreshes or writes tokens, so it can't interfere with
 /// Claude Code's own session. When the token expires, Claude Code refreshes it the next time it runs.
-public enum CredentialStore {
+public enum ClaudeCredentialStore {
     public static let keychainService = "Claude Code-credentials"
 
-    public static func load() throws -> Credentials {
+    public static func load() throws -> ClaudeCredentials {
         if let data = readKeychain() {
             return try parse(data)
         }
@@ -38,7 +33,7 @@ public enum CredentialStore {
         throw CredentialError.notFound
     }
 
-    static func parse(_ data: Data) throws -> Credentials {
+    static func parse(_ data: Data) throws -> ClaudeCredentials {
         struct Stored: Decodable {
             struct OAuth: Decodable {
                 var accessToken: String
@@ -54,7 +49,7 @@ public enum CredentialStore {
         guard let oauth = stored.claudeAiOauth, !oauth.accessToken.isEmpty else {
             throw CredentialError.notFound
         }
-        return Credentials(
+        return ClaudeCredentials(
             accessToken: oauth.accessToken,
             expiresAt: oauth.expiresAt.map { Date(timeIntervalSince1970: $0 / 1000) },
             subscriptionType: oauth.subscriptionType,

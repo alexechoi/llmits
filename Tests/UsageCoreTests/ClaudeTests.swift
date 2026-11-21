@@ -2,8 +2,6 @@ import Foundation
 import Testing
 @testable import UsageCore
 
-private let now = ISODate.parse("2026-11-21T20:15:00Z")!
-
 /// Trimmed from a real response, plus an unknown field to check it's ignored.
 private let sample = """
 {
@@ -22,10 +20,10 @@ private let sample = """
 """
 
 private func rows(_ json: String) throws -> [LimitRow] {
-    UsageSummary.rows(from: try UsageResponse.decode(Data(json.utf8)), now: now)
+    try ClaudeUsageResponse.decode(Data(json.utf8)).rows(now: now)
 }
 
-@Suite struct UsageSummaryTests {
+@Suite struct ClaudeUsageTests {
     @Test func rowsFromLimits() throws {
         let rows = try rows(sample)
         #expect(rows.map(\.title) == ["Session (5h)", "Weekly · all models", "Weekly · Fable"])
@@ -78,91 +76,25 @@ private func rows(_ json: String) throws -> [LimitRow] {
 
     @Test func windowsPastTheirResetAreShownAsReset() {
         let past = now.addingTimeInterval(-60)
-        let usage = UsageResponse(
+        let usage = ClaudeUsageResponse(
             fiveHour: .init(utilization: 70, resetsAt: past),
             limits: [.init(kind: "weekly_all", percent: 99, severity: "critical", resetsAt: past)]
         )
-        let rows = UsageSummary.rows(from: usage, now: now)
+        let rows = usage.rows(now: now)
         #expect(rows[0].percent == nil)  // a new session only starts on next use
         #expect(rows[1].percent == 0)  // a new week starts straight away
         #expect(rows[1].severity == .normal)
         #expect(rows[1].resetsAt == nil)
     }
-
-    @Test func tightestIgnoresClosedWindowsAndBreaksTiesBySeverity() {
-        let rows = [
-            LimitRow(id: "session", title: "Session", percent: nil, resetsAt: nil, severity: .normal),
-            LimitRow(id: "a", title: "A", percent: 80, resetsAt: nil, severity: .warning),
-            LimitRow(id: "b", title: "B", percent: 80, resetsAt: nil, severity: .critical),
-        ]
-        #expect(UsageSummary.tightest(rows)?.id == "b")
-        #expect(UsageSummary.tightest([rows[0]]) == nil)
-    }
-
-    @Test func severityFallsBackToThresholds() {
-        #expect(Severity(serverValue: nil, percent: 74) == .normal)
-        #expect(Severity(serverValue: nil, percent: 75) == .warning)
-        #expect(Severity(serverValue: "something_new", percent: 90) == .critical)
-        #expect(Severity(serverValue: "normal", percent: 95) == .normal)  // the server's word wins
-    }
 }
 
-@Suite struct FormatTests {
-    @Test func resetCountdowns() {
-        #expect(Format.reset(now.addingTimeInterval(42 * 60), now: now) == "resets in 42m")
-        #expect(Format.reset(now.addingTimeInterval(3 * 3600 + 5 * 60), now: now) == "resets in 3h 5m")
-        #expect(Format.reset(now.addingTimeInterval(-1), now: now) == nil)
-        #expect(Format.reset(nil, now: now) == nil)
-    }
-
-    @Test func resetMoreThanADayAwayShowsTheWeekday() {
-        let date = ISODate.parse("2026-11-25T05:00:00.204008+00:00")!
-        let reset = Format.reset(date, now: now, locale: Locale(identifier: "en_GB"), timeZone: TimeZone(identifier: "UTC")!)
-        #expect(reset == "resets Wed 05:00")
-    }
-
-    @Test func resetTimesRoundToTheNearestMinute() {
-        let date = ISODate.parse("2026-11-25T04:59:59.9Z")!
-        let reset = Format.reset(date, now: now, locale: Locale(identifier: "en_GB"), timeZone: TimeZone(identifier: "UTC")!)
-        #expect(reset == "resets Wed 05:00")
-    }
-
-    @Test func spokenDescriptionsForVoiceOver() {
-        let gb = Locale(identifier: "en_GB")
-        let utc = TimeZone(identifier: "UTC")!
-        let soon = LimitRow(id: "a", title: "Weekly · Fable", percent: 93.6,
-                            resetsAt: now.addingTimeInterval(3 * 3600 + 5 * 60), severity: .critical)
-        #expect(Format.spokenTitle(soon) == "Weekly, Fable")
-        #expect(Format.spokenValue(soon, now: now, locale: gb, timeZone: utc) == "94 percent used, resets in 3 hours, 5 minutes")
-
-        let later = LimitRow(id: "b", title: "Weekly · all models", percent: 58,
-                             resetsAt: ISODate.parse("2026-11-25T04:59:59.9Z"), severity: .normal)
-        #expect(Format.spokenValue(later, now: now, locale: gb, timeZone: utc) == "58 percent used, resets Wednesday 05:00")
-
-        let closed = LimitRow(id: "session", title: "Session (5h)", percent: nil, resetsAt: nil, severity: .normal)
-        #expect(Format.spokenValue(closed, now: now) == "No active session")
-    }
-
-    @Test func percent() {
-        #expect(Format.percent(55.6) == "56%")
-        #expect(Format.percent(0) == "0%")
-        #expect(Format.percent(nil) == "—")
-    }
-
-    @Test func plan() {
-        #expect(Format.plan(subscriptionType: "max", rateLimitTier: "default_claude_max_20x") == "Max 20x")
-        #expect(Format.plan(subscriptionType: "pro", rateLimitTier: nil) == "Pro")
-        #expect(Format.plan(subscriptionType: nil, rateLimitTier: "default_claude_max_5x") == nil)
-    }
-}
-
-@Suite struct CredentialTests {
+@Suite struct ClaudeCredentialTests {
     @Test func parsesClaudeCodeCredentials() throws {
         let json = """
         {"mcpOAuth": {}, "claudeAiOauth": {"accessToken": "tok", "refreshToken": "r", "expiresAt": 1795292100000,
          "subscriptionType": "max", "rateLimitTier": "default_claude_max_20x", "scopes": ["user:inference"]}}
         """
-        let credentials = try CredentialStore.parse(Data(json.utf8))
+        let credentials = try ClaudeCredentialStore.parse(Data(json.utf8))
         #expect(credentials.accessToken == "tok")
         #expect(credentials.expiresAt == Date(timeIntervalSince1970: 1_795_292_100))
         #expect(credentials.subscriptionType == "max")
@@ -170,28 +102,90 @@ private func rows(_ json: String) throws -> [LimitRow] {
     }
 
     @Test func expiryHasASafetyMargin() {
-        let credentials = Credentials(accessToken: "t", expiresAt: now)
+        let credentials = ClaudeCredentials(accessToken: "t", expiresAt: now)
         #expect(!credentials.isExpired(at: now.addingTimeInterval(-3600)))
         #expect(credentials.isExpired(at: now.addingTimeInterval(-30)))
-        #expect(!Credentials(accessToken: "t", expiresAt: nil).isExpired(at: now))
+        #expect(!ClaudeCredentials(accessToken: "t", expiresAt: nil).isExpired(at: now))
     }
 
     @Test func missingOrMalformedCredentials() {
         #expect(throws: CredentialError.notFound) {
-            try CredentialStore.parse(Data(#"{"mcpOAuth": {}}"#.utf8))
+            try ClaudeCredentialStore.parse(Data(#"{"mcpOAuth": {}}"#.utf8))
         }
         #expect(throws: CredentialError.malformed) {
-            try CredentialStore.parse(Data("not json".utf8))
+            try ClaudeCredentialStore.parse(Data("not json".utf8))
         }
     }
 }
 
-@Suite struct DateParsingTests {
-    @Test func acceptsMicrosecondsAndOffsets() {
-        let expected = Date(timeIntervalSince1970: 1_795_582_800)  // 2026-11-25T05:00:00Z
-        #expect(ISODate.parse("2026-11-25T05:00:00.204008+00:00").map { $0.timeIntervalSince1970.rounded(.down) } == expected.timeIntervalSince1970)
-        #expect(ISODate.parse("2026-11-25T06:00:00+01:00") == expected)
-        #expect(ISODate.parse("2026-11-25T05:00:00Z") == expected)
-        #expect(ISODate.parse("garbage") == nil)
+@Suite struct ClaudeSourceTests {
+    private let valid = ClaudeCredentials(accessToken: "token-1", expiresAt: now.addingTimeInterval(3600),
+                                          subscriptionType: "max", rateLimitTier: "default_claude_max_20x")
+
+    @Test func keepsTheTokenInMemoryBetweenPolls() async {
+        let loads = Recorder<Void>()
+        let requests = Recorder<[String: String]>()
+        let source = ClaudeSource(
+            loadCredentials: { [valid] in loads.record(()); return valid },
+            get: { _, headers in requests.record(headers); return reply(200, sample) }
+        )
+        let first = await source.fetch(now: now)
+        _ = await source.fetch(now: now.addingTimeInterval(120))
+
+        #expect(loads.all.count == 1)  // the keychain was read once, not on every poll
+        #expect(requests.all.count == 2)
+        #expect(requests.all.first?["Authorization"] == "Bearer token-1")
+        #expect(requests.all.first?["anthropic-beta"] == "oauth-2025-04-20")
+        guard case let .success(usage) = first else {
+            Issue.record("expected success, got \(first)")
+            return
+        }
+        #expect(usage.plan == "Max 20x")
+        #expect(usage.rows.count == 3)
+    }
+
+    @Test func retriesOnceWhenClaudeCodeHasRenewedTheToken() async {
+        var renewed = valid
+        renewed.accessToken = "token-2"
+        let stored = Sequence([valid, renewed])
+        let requests = Recorder<String?>()
+        let source = ClaudeSource(
+            loadCredentials: { stored.next() },
+            get: { _, headers in
+                requests.record(headers["Authorization"])
+                return headers["Authorization"] == "Bearer token-2" ? reply(200, sample) : reply(401)
+            }
+        )
+        let outcome = await source.fetch(now: now)
+        #expect(requests.all == ["Bearer token-1", "Bearer token-2"])
+        if case .success = outcome {} else { Issue.record("expected success, got \(outcome)") }
+    }
+
+    @Test func rejectedTokenIsReportedAsExpired() async {
+        let source = ClaudeSource(loadCredentials: { [valid] in valid }, get: { _, _ in reply(401) })
+        #expect(await source.fetch(now: now) == .tokenExpired(plan: "Max 20x"))
+    }
+
+    @Test func expiredTokenIsNotSent() async {
+        let requests = Recorder<Void>()
+        let expired = ClaudeCredentials(accessToken: "old", expiresAt: now.addingTimeInterval(-10))
+        let source = ClaudeSource(loadCredentials: { expired }, get: { _, _ in requests.record(()); return reply(200, sample) })
+        #expect(await source.fetch(now: now) == .tokenExpired(plan: nil))
+        #expect(requests.all.isEmpty)
+    }
+
+    @Test func statusCodes() async {
+        func outcome(_ reply: HTTP.Reply) async -> FetchOutcome {
+            await ClaudeSource(loadCredentials: { [valid] in valid }, get: { _, _ in reply }).fetch(now: now)
+        }
+        #expect(await outcome(reply(403)) == .rateLimited(retryAfter: nil))
+        #expect(await outcome(reply(429, retryAfter: 30)) == .rateLimited(retryAfter: 30))
+        #expect(await outcome(reply(500)) == .failed("Anthropic returned HTTP 500"))
+        #expect(await outcome(reply(200, "<html>")) == .failed("Unexpected response from Anthropic"))
+    }
+
+    @Test func noLoginIsNotSignedIn() async {
+        let source = ClaudeSource(loadCredentials: { throw CredentialError.notFound }, get: { _, _ in reply(200, sample) })
+        #expect(await source.fetch(now: now) == .notSignedIn)
     }
 }
