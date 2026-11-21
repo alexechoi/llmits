@@ -127,6 +127,22 @@ private func rows(_ json: String) throws -> [LimitRow] {
         #expect(reset == "resets Wed 05:00")
     }
 
+    @Test func spokenDescriptionsForVoiceOver() {
+        let gb = Locale(identifier: "en_GB")
+        let utc = TimeZone(identifier: "UTC")!
+        let soon = LimitRow(id: "a", title: "Weekly · Fable", percent: 93.6,
+                            resetsAt: now.addingTimeInterval(3 * 3600 + 5 * 60), severity: .critical)
+        #expect(Format.spokenTitle(soon) == "Weekly, Fable")
+        #expect(Format.spokenValue(soon, now: now, locale: gb, timeZone: utc) == "94 percent used, resets in 3 hours, 5 minutes")
+
+        let later = LimitRow(id: "b", title: "Weekly · all models", percent: 58,
+                             resetsAt: ISODate.parse("2026-11-25T04:59:59.9Z"), severity: .normal)
+        #expect(Format.spokenValue(later, now: now, locale: gb, timeZone: utc) == "58 percent used, resets Wednesday 05:00")
+
+        let closed = LimitRow(id: "session", title: "Session (5h)", percent: nil, resetsAt: nil, severity: .normal)
+        #expect(Format.spokenValue(closed, now: now) == "No active session")
+    }
+
     @Test func percent() {
         #expect(Format.percent(55.6) == "56%")
         #expect(Format.percent(0) == "0%")

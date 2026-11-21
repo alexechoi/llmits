@@ -25,9 +25,50 @@ public enum Format {
         formatter.locale = locale
         formatter.timeZone = timeZone
         formatter.setLocalizedDateFormatFromTemplate("EEEjjmm")
-        // Round rather than truncate, so a reset at 04:59:59.9 reads as 05:00.
-        let rounded = Date(timeIntervalSinceReferenceDate: (date.timeIntervalSinceReferenceDate / 60).rounded() * 60)
-        return "resets \(formatter.string(from: rounded))"
+        return "resets \(formatter.string(from: roundedToMinute(date)))"
+    }
+
+    /// Rounds rather than truncates, so a reset at 04:59:59.9 reads as 05:00.
+    private static func roundedToMinute(_ date: Date) -> Date {
+        Date(timeIntervalSinceReferenceDate: (date.timeIntervalSinceReferenceDate / 60).rounded() * 60)
+    }
+
+    /// A row's title for VoiceOver, e.g. "Weekly, Fable" rather than reading out the "·".
+    public static func spokenTitle(_ row: LimitRow) -> String {
+        row.title.replacingOccurrences(of: " · ", with: ", ")
+    }
+
+    /// A row's value for VoiceOver, e.g. "94 percent used, resets in 3 hours, 5 minutes".
+    public static func spokenValue(
+        _ row: LimitRow,
+        now: Date = .now,
+        locale: Locale = .current,
+        timeZone: TimeZone = .current
+    ) -> String {
+        guard let percent = row.percent else { return "No active session" }
+        var parts = ["\(Int(percent.rounded())) percent used"]
+        if let resetsAt = row.resetsAt, resetsAt > now {
+            let seconds = resetsAt.timeIntervalSince(now)
+            if seconds < 24 * 3600 {
+                let formatter = DateComponentsFormatter()
+                formatter.unitsStyle = .full
+                formatter.allowedUnits = seconds < 3600 ? [.minute] : [.hour, .minute]
+                var calendar = Calendar.current
+                calendar.locale = locale
+                formatter.calendar = calendar
+                let rounded = (seconds / 60).rounded(.up) * 60
+                if let interval = formatter.string(from: rounded) {
+                    parts.append("resets in \(interval)")
+                }
+            } else {
+                let formatter = DateFormatter()
+                formatter.locale = locale
+                formatter.timeZone = timeZone
+                formatter.setLocalizedDateFormatFromTemplate("EEEEjjmm")
+                parts.append("resets \(formatter.string(from: roundedToMinute(resetsAt)))")
+            }
+        }
+        return parts.joined(separator: ", ")
     }
 
     /// A clock time such as "20:15", in the user's preferred hour cycle.

@@ -18,6 +18,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var isRefreshing = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Remember the item's position, and let people ⌘-drag it out of the menu bar to remove
+        // it (which quits the app): it's their choice whether it lives there, not the app's.
+        statusItem.autosaveName = "ClaudeUsageBar"
+        statusItem.behavior = .terminationOnRemoval
+        statusItem.isVisible = true
         statusItem.button?.imagePosition = .imageLeading
         menu.delegate = self
         statusItem.menu = menu
@@ -84,24 +89,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateButton(top: LimitRow?, stale: Bool) {
         guard let button = statusItem.button else { return }
-        let tint = stale ? nil : top?.severity.statusBarColor
-        let text = " " + Format.percent(top?.percent)
-        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .regular)
+        let severity = top?.severity ?? .normal
+        // Colour goes on the icon only, never the text, so the percentage keeps the menu bar's
+        // own contrast on any wallpaper. Stale data drops the colour altogether.
+        let tint = stale ? nil : severity.statusBarColor
 
-        button.image = GaugeIcon.image(fraction: (top?.percent ?? 0) / 100, tint: tint)
-        if let tint {
-            button.attributedTitle = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: tint])
-        } else {
-            // A plain title follows the menu bar's own text colour.
-            button.title = text
-            button.font = font
-        }
+        button.image = StatusIcon.image(fraction: (top?.percent ?? 0) / 100, severity: severity, tint: tint)
+        button.title = Format.percent(top?.percent)
+        button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .regular)
         button.appearsDisabled = stale || top == nil
+
+        let summary = top.map { "\(Format.spokenTitle($0)): \(Format.spokenValue($0))" }
+        button.setAccessibilityLabel("Claude usage")
+        button.setAccessibilityValue(summary ?? "No data")
         button.toolTip = top.map { "Claude usage · \($0.title): \(Format.percent($0.percent))" } ?? "Claude usage"
     }
 
     private func rebuildMenu(rows: [LimitRow], stale: Bool) {
         menu.removeAllItems()
+        menu.addItem(.sectionHeader(title: plan.map { "Claude \($0)" } ?? "Claude Usage"))
 
         if rows.isEmpty {
             menu.addItem(infoItem(problem ?? "Loading…"))
@@ -115,17 +121,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             menu.addItem(.separator())
             if let problem {
-                menu.addItem(infoItem("⚠︎ " + problem))
+                menu.addItem(infoItem(problem))
             }
-            let updated = lastUpdated.map { "Updated \(Format.time($0))" } ?? "Not updated yet"
-            menu.addItem(infoItem([plan, updated].compactMap { $0 }.joined(separator: " · ")))
+            if let lastUpdated {
+                menu.addItem(infoItem("\(stale ? "Last updated" : "Updated") \(Format.time(lastUpdated))"))
+            }
         }
 
         menu.addItem(.separator())
         menu.addItem(actionItem("Refresh", #selector(refreshNow), key: "r"))
         menu.addItem(launchAtLoginItem())
         menu.addItem(.separator())
-        let quit = actionItem("Quit", #selector(NSApplication.terminate(_:)), key: "q")
+        let quit = actionItem("Quit Claude Usage Bar", #selector(NSApplication.terminate(_:)), key: "q")
         quit.target = NSApp
         menu.addItem(quit)
     }
