@@ -87,7 +87,8 @@ public struct ClaudeUsageResponse: Sendable, Equatable {
             title: title(for: limit),
             percent: limit.percent,
             resetsAt: limit.resetsAt,
-            severity: Severity(serverValue: limit.severity, percent: limit.percent)
+            severity: Severity(serverValue: limit.severity, percent: limit.percent),
+            windowLength: windowLength(kind: limit.kind, group: limit.group)
         )
     }
 
@@ -97,8 +98,18 @@ public struct ClaudeUsageResponse: Sendable, Equatable {
             title: title,
             percent: window?.utilization,
             resetsAt: window?.resetsAt,
-            severity: Severity(percent: window?.utilization)
+            severity: Severity(percent: window?.utilization),
+            windowLength: id == "session" ? 5 * 3600 : 7 * 86_400
         )
+    }
+
+    /// The server doesn't say how long each window is, but its kinds and groups do.
+    static func windowLength(kind: String, group: String?) -> TimeInterval? {
+        let name = "\(kind) \(group ?? "")"
+        if name.contains("session") { return 5 * 3600 }
+        if name.contains("daily") { return 86_400 }
+        if name.contains("weekly") { return 7 * 86_400 }
+        return nil
     }
 }
 

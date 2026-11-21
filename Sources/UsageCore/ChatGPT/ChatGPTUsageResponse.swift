@@ -64,7 +64,8 @@ public struct ChatGPTUsageResponse: Sendable, Equatable {
                 title: label.map { "\(span) · \($0)" } ?? span,
                 percent: window.usedPercent,
                 resetsAt: window.resetAt ?? window.resetAfterSeconds.map { now.addingTimeInterval(TimeInterval($0)) },
-                severity: severity
+                severity: severity,
+                windowLength: window.limitWindowSeconds.map(TimeInterval.init)
             ))
         }
     }

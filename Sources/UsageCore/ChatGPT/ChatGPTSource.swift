@@ -38,13 +38,13 @@ public actor ChatGPTSource: UsageSource {
         do {
             reply = try await get(Self.endpoint, headers)
         } catch {
-            return .failed(error.localizedDescription)
+            return .failed(Failure(error))
         }
 
         switch reply.status {
         case 200:
             guard let usage = try? ChatGPTUsageResponse.decode(reply.data) else {
-                return .failed("Unexpected response from OpenAI")
+                return .failed(.unreadable)
             }
             return .success(ServiceUsage(
                 service: .chatGPT,
@@ -56,7 +56,7 @@ public actor ChatGPTSource: UsageSource {
         case 429:
             return .rateLimited(retryAfter: reply.retryAfter)
         case let status:
-            return .failed("OpenAI returned HTTP \(status)")
+            return .failed(.server(status: status))
         }
     }
 }

@@ -34,6 +34,7 @@ private func rows(_ json: String) throws -> [LimitRow] {
         #expect(rows.map(\.percent) == [35])
         #expect(rows.first?.resetsAt == Date(timeIntervalSince1970: 1_795_564_142))
         #expect(rows.first?.severity == .normal)
+        #expect(rows.first?.windowLength == 604_800)
     }
 
     @Test func everyKindOfWindow() throws {
@@ -125,7 +126,7 @@ private func rows(_ json: String) throws -> [LimitRow] {
         }
         #expect(await outcome(reply(401)) == .tokenExpired(plan: nil))
         #expect(await outcome(reply(429, retryAfter: 60)) == .rateLimited(retryAfter: 60))
-        #expect(await outcome(reply(403)) == .failed("OpenAI returned HTTP 403"))
+        #expect(await outcome(reply(403)) == .failed(.server(status: 403)))
     }
 
     @Test func noLoginIsNotSignedIn() async {

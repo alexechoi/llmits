@@ -49,7 +49,36 @@ public enum FetchOutcome: Sendable, Equatable {
     /// The stored token has expired or was rejected; its tool renews it the next time it runs.
     case tokenExpired(plan: String?)
     case rateLimited(retryAfter: TimeInterval?)
-    case failed(String)
+    case failed(Failure)
+}
+
+/// Why a fetch failed, kept structured so the copy can say what happens next.
+public enum Failure: Sendable, Equatable {
+    case offline
+    /// The service answered with an unexpected HTTP status.
+    case server(status: Int)
+    /// The service answered, but not in a shape the app understands.
+    case unreadable
+    case other(String)
+
+    init(_ error: any Error) {
+        let offline: Set<URLError.Code> = [
+            .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost,
+            .dnsLookupFailed, .timedOut, .dataNotAllowed, .internationalRoamingOff,
+        ]
+        if let error = error as? URLError, offline.contains(error.code) {
+            self = .offline
+        } else {
+            self = .other(error.localizedDescription)
+        }
+    }
+}
+
+/// Why a service's numbers may be out of date.
+public enum Problem: Sendable, Equatable {
+    case tokenExpired
+    case rateLimited(until: Date)
+    case failed(Failure)
 }
 
 /// Fetches one service's usage. Implementations only ever read the stored login.

@@ -180,12 +180,26 @@ private func rows(_ json: String) throws -> [LimitRow] {
         }
         #expect(await outcome(reply(403)) == .rateLimited(retryAfter: nil))
         #expect(await outcome(reply(429, retryAfter: 30)) == .rateLimited(retryAfter: 30))
-        #expect(await outcome(reply(500)) == .failed("Anthropic returned HTTP 500"))
-        #expect(await outcome(reply(200, "<html>")) == .failed("Unexpected response from Anthropic"))
+        #expect(await outcome(reply(500)) == .failed(.server(status: 500)))
+        #expect(await outcome(reply(200, "<html>")) == .failed(.unreadable))
     }
 
     @Test func noLoginIsNotSignedIn() async {
         let source = ClaudeSource(loadCredentials: { throw CredentialError.notFound }, get: { _, _ in reply(200, sample) })
         #expect(await source.fetch(now: now) == .notSignedIn)
+    }
+
+    @Test func noConnectionIsOffline() async {
+        let source = ClaudeSource(loadCredentials: { [valid] in valid }, get: { _, _ in throw URLError(.notConnectedToInternet) })
+        #expect(await source.fetch(now: now) == .failed(.offline))
+    }
+
+    @Test func windowLengthsComeFromTheLimitKind() throws {
+        let rows = try ClaudeUsageResponse.decode(Data(sample.utf8)).rows(now: now)
+        let expected: [TimeInterval?] = [18_000, 604_800, 604_800]  // 5 hours, then 7 days
+        #expect(rows.map(\.windowLength) == expected)
+        // 2026-11-21 20:15 is 3.36 days into the week that ends on the 25th at 05:00.
+        #expect(rows[1].elapsedFraction(at: now).map { ($0 * 100).rounded() } == 52)
+        #expect(rows[0].elapsedFraction(at: now) == nil)  // no session in progress
     }
 }

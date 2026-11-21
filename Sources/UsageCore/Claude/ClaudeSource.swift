@@ -46,13 +46,13 @@ public actor ClaudeSource: UsageSource {
                 "anthropic-beta": "oauth-2025-04-20",
             ])
         } catch {
-            return .failed(error.localizedDescription)
+            return .failed(Failure(error))
         }
 
         switch reply.status {
         case 200:
             guard let usage = try? ClaudeUsageResponse.decode(reply.data) else {
-                return .failed("Unexpected response from Anthropic")
+                return .failed(.unreadable)
             }
             return .success(ServiceUsage(service: .claude, plan: plan, rows: usage.rows(now: now)))
         case 401:
@@ -68,7 +68,7 @@ public actor ClaudeSource: UsageSource {
             // Claude Code treats both as rate limiting on this endpoint.
             return .rateLimited(retryAfter: reply.retryAfter)
         case let status:
-            return .failed("Anthropic returned HTTP \(status)")
+            return .failed(.server(status: status))
         }
     }
 }

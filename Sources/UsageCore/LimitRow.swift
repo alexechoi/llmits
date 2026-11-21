@@ -34,13 +34,44 @@ public struct LimitRow: Sendable, Equatable, Identifiable {
     public var percent: Double?
     public var resetsAt: Date?
     public var severity: Severity
+    /// How long the window lasts, when known: 5 hours for a session, 7 days for a week.
+    public var windowLength: TimeInterval?
 
-    public init(id: String, title: String, percent: Double?, resetsAt: Date?, severity: Severity) {
+    public init(
+        id: String,
+        title: String,
+        percent: Double?,
+        resetsAt: Date?,
+        severity: Severity,
+        windowLength: TimeInterval? = nil
+    ) {
         self.id = id
         self.title = title
         self.percent = percent
         self.resetsAt = resetsAt
         self.severity = severity
+        self.windowLength = windowLength
+    }
+
+    /// How much of the current window has passed, from 0 to 1. Compared with the share used,
+    /// it shows whether usage is running ahead of the window.
+    public func elapsedFraction(at now: Date) -> Double? {
+        guard percent != nil, let resetsAt, let windowLength, windowLength > 0, resetsAt > now else { return nil }
+        return min(max(1 - resetsAt.timeIntervalSince(now) / windowLength, 0), 1)
+    }
+
+    public enum Pace: Sendable, Equatable {
+        /// Usage is at or behind an even pace through the window.
+        case onTrack
+        /// Usage is running more than a few points ahead of an even pace.
+        case ahead
+    }
+
+    /// Whether usage is keeping up with the window. `nil` early in a window, when any use at all
+    /// would look "ahead", and once the limit is used up, when pace no longer matters.
+    public func pace(at now: Date) -> Pace? {
+        guard let percent, percent < 100, let elapsed = elapsedFraction(at: now), elapsed >= 0.1 else { return nil }
+        return percent - elapsed * 100 > 5 ? .ahead : .onTrack
     }
 
     /// Shows a window whose reset time has passed as reset, so stale data never keeps reporting
