@@ -46,11 +46,18 @@ if [[ -z "$swift_major" ]] || (( swift_major < 6 )); then
 fi
 note "macOS $macos_version, Swift $swift_version"
 
+found_login=false
 if security find-generic-password -s "Claude Code-credentials" >/dev/null 2>&1 || [[ -f "$HOME/.claude/.credentials.json" ]]; then
-  note "Found your Claude Code login"
-else
-  note "No Claude Code login found yet. The app will install, but shows nothing until you"
-  note "install Claude Code and sign in (run 'claude', then /login)."
+  note "Found your Claude Code login (for Claude limits)"
+  found_login=true
+fi
+if grep -q '"access_token"' "${CODEX_HOME:-$HOME/.codex}/auth.json" 2>/dev/null; then
+  note "Found your Codex ChatGPT login (for ChatGPT limits)"
+  found_login=true
+fi
+if [[ "$found_login" == false ]]; then
+  note "No Claude Code or Codex login found yet. The app will install, but has nothing to show"
+  note "until you sign in to at least one: run 'claude' then /login, or 'codex login'."
 fi
 
 # Use this checkout when run from a clone; otherwise download a fresh copy.
@@ -74,6 +81,6 @@ fi
 
 step "Done"
 note "$APP_NAME is installed in ~/Applications and running."
-note "Look for the ✳︎ ring in your menu bar; click it for every limit and when each resets."
+note "Look for the ◈ ring and a percentage in your menu bar; click it for every limit."
 note "To start it automatically, choose Launch at Login from its menu."
 note "Can't see it? If you use Bartender or Ice, it may be in the hidden section."
