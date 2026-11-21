@@ -12,9 +12,10 @@ swift build -c release --product "$EXECUTABLE"
 BIN_DIR="$(swift build -c release --show-bin-path)"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/$EXECUTABLE" "$APP/Contents/MacOS/"
 cp Support/Info.plist "$APP/Contents/Info.plist"
+cp Support/Logos/*.svg "$APP/Contents/Resources/"
 # Ad-hoc signature: enough to run locally and to register as a login item.
 codesign --force --sign - "$APP"
 echo "Built $APP"

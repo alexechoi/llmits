@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var menuIsDirty = true
     /// Row views are kept and updated in place, so an open menu never rebuilds under the pointer.
     private var rowItems: [String: NSMenuItem] = [:]
+    private var headerItems: [Service: NSMenuItem] = [:]
     private var lastButton: ButtonContent?
     /// Asking ServiceManagement is a cross-process call, so it's checked once per menu opening.
     private var launchesAtLogin = false
@@ -228,7 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if index > 0 || allOffline {
                 items.append(.separator())
             }
-            items.append(.sectionHeader(title: [service.name, state.plan].compactMap { $0 }.joined(separator: " ")))
+            items.append(headerItem(for: service, plan: state.plan))
 
             // The explanation comes first, above the numbers it qualifies.
             if let problem = state.problem, !allOffline {
@@ -352,6 +353,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // MARK: - Helpers
+
+    /// A service's heading, with its logo. Reused, like the rows.
+    private func headerItem(for service: Service, plan: String?) -> NSMenuItem {
+        let item = headerItems[service] ?? {
+            let item = NSMenuItem()
+            item.view = SectionHeaderView()
+            headerItems[service] = item
+            return item
+        }()
+        let title = [service.name, plan].compactMap { $0 }.joined(separator: " ")
+        (item.view as? SectionHeaderView)?.update(title: title, logo: ServiceLogo.image(for: service))
+        return item
+    }
 
     /// A notice that wraps and reads at full contrast, unlike a disabled menu item.
     private func noticeItem(_ text: String, detail: String?, showsIcon: Bool) -> NSMenuItem {

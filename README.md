@@ -2,7 +2,7 @@
 
 See how much of your Claude and ChatGPT plans you've used, right in your Mac's menu bar.
 
-<img src="docs/screenshot.png" alt="The menu bar shows a red exclamation ring at 100%. Its menu has a Claude Max 20x section (5-hour session not started; weekly all models 62%, resets Wednesday, ahead of pace; weekly Fable 100% in red) and a ChatGPT Pro 100 section (weekly 35%, resets Tuesday, on track), then Refresh, Launch at Login and Quit." width="320">
+<img src="docs/screenshot.png" alt="The menu bar shows a red exclamation ring at 100%. Its menu has a Claude Max 20x section, headed by the Claude logo, (5-hour session not started; weekly all models 62%, resets Wednesday, ahead of pace; weekly Fable 100% in red) and a ChatGPT Pro 100 section headed by the OpenAI logo (weekly 35%, resets Tuesday, on track), then Refresh, Launch at Login and Quit." width="320">
 
 ## Install
 
@@ -73,7 +73,7 @@ The app follows Apple's [Human Interface Guidelines](https://developer.apple.com
 
 - The icon is an SF Symbol drawn in the menu bar's own colours, so it adapts to light and dark menu bars and Liquid Glass. Its ring uses SF Symbols 7's Variable Draw to fill with your usage.
 - Colour is used sparingly, for status only, and only on the icon. The percentage keeps the menu bar's standard text colour so it stays readable on any wallpaper. Critical also changes the icon's shape, so the state never depends on colour alone.
-- Clicking opens a standard menu rather than a popover, with each plan as a native section header. Bars stay neutral while all's well, so orange and red only ever mean trouble, and percentages keep full-contrast text.
+- Clicking opens a standard menu rather than a popover, with each service's section headed by its logo and plan. The logos are single-colour, in the header's own grey, and otherwise unaltered. Bars stay neutral while all's well, so orange and red only ever mean trouble, and percentages keep full-contrast text.
 - Warning and critical limits also get their own glyphs, and every limit has a VoiceOver label and value, such as "Weekly, Fable: Limit reached, 100 percent used, resets Wednesday 05:00".
 - Messages say what happens next ("You're offline. Retrying automatically."), and an out-of-date service never hides a live warning from another.
 - You decide whether it's in your menu bar: ⌘-drag it out to remove it, and Launch at Login is off until you turn it on.
@@ -109,12 +109,13 @@ swift run
 | `Sources/UsageCore` | One usage source per service (`Claude/`, `ChatGPT/`): credentials, response decoding and rows; plus the shared limit model and formatting. No AppKit, and fully unit-tested. |
 | `Sources/ClaudeUsageBar` | The menu bar item, the menu, and its custom AppKit rows and notices. |
 | `Support/Info.plist` | Bundle metadata (`LSUIElement`, so there's no Dock icon). |
+| `Support/Logos` | The Claude and OpenAI marks shown beside each section, with where they came from. |
 | `scripts/build-app.sh` | Builds `build/Claude Usage Bar.app`; `--install` also copies it to `~/Applications` and launches it. |
 | `install.sh` | The one-line installer and uninstaller. |
 
 ## Disclaimer
 
-Unofficial and not affiliated with or endorsed by Anthropic or OpenAI. Claude is a trademark of Anthropic; ChatGPT and Codex are trademarks of OpenAI. The app relies on undocumented endpoints, so it may stop working at any time.
+Unofficial and not affiliated with or endorsed by Anthropic or OpenAI. Claude and the Claude logo are trademarks of Anthropic; ChatGPT, Codex and the OpenAI logo are trademarks of OpenAI. The logos in [`Support/Logos`](Support/Logos) come from each company's own brand resources and aren't covered by the MIT licence. The app relies on undocumented endpoints, so it may stop working at any time.
 
 ## Licence
 

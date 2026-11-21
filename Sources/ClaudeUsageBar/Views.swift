@@ -307,3 +307,84 @@ final class NoticeView: NSView {
         }
     }
 }
+
+/// Each service's own mark, beside its section header. Single-colour and otherwise unaltered,
+/// drawn in the header's colour so it reads as a label rather than a badge.
+@MainActor
+enum ServiceLogo {
+    private static var cache: [Service: NSImage] = [:]
+
+    static func image(for service: Service) -> NSImage? {
+        if let image = cache[service] {
+            return image
+        }
+        let name = switch service {
+        case .claude: "claude-spark"
+        case .chatGPT: "openai-blossom"
+        }
+        // Bundled by scripts/build-app.sh; absent under `swift run`, where headers show text only.
+        guard let url = Bundle.main.url(forResource: name, withExtension: "svg"),
+              let image = NSImage(contentsOf: url)
+        else { return nil }
+        image.isTemplate = true
+        image.size = NSSize(width: SectionHeaderView.logoSize, height: SectionHeaderView.logoSize)
+        image.accessibilityDescription = service.name
+        cache[service] = image
+        return image
+    }
+}
+
+/// A service's section heading: its logo and plan, e.g. "Claude Max 20x".
+final class SectionHeaderView: NSView {
+    static let logoSize: CGFloat = 12
+
+    private let logo = NSImageView()
+    private let titleLabel = NSTextField(labelWithString: "")
+
+    override var isFlipped: Bool { true }
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: 24))
+        logo.imageScaling = .scaleProportionallyUpOrDown
+        logo.contentTintColor = .secondaryLabelColor
+        titleLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
+        titleLabel.textColor = .secondaryLabelColor
+        for view in [logo, titleLabel] {
+            view.setAccessibilityElement(false)
+            addSubview(view)
+        }
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func update(title: String, logo image: NSImage?) {
+        titleLabel.stringValue = title
+        logo.image = image
+        logo.isHidden = image == nil
+        setAccessibilityLabel(title)
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        let height = bounds.height
+        var x = MenuMetrics.leading
+        if !logo.isHidden {
+            let side = Self.logoSize
+            logo.frame = NSRect(x: x, y: (height - side) / 2, width: side, height: side)
+            x += side + 6
+        }
+        let textHeight = titleLabel.fittingSize.height
+        titleLabel.frame = NSRect(
+            x: x - MenuMetrics.textPadding,
+            y: (height - textHeight) / 2,
+            width: MenuMetrics.width - x - MenuMetrics.trailing,
+            height: textHeight
+        )
+    }
+}
