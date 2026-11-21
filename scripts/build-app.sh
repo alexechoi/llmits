@@ -22,9 +22,14 @@ echo "Built $APP"
 if [[ "${1:-}" == "--install" ]]; then
   DEST="$HOME/Applications/$APP_NAME.app"
   mkdir -p "$HOME/Applications"
+  # Quit a running copy and wait for it to exit, or launching the new one can fail.
   pkill -x "$EXECUTABLE" 2>/dev/null || true
+  for _ in {1..50}; do
+    pgrep -x "$EXECUTABLE" >/dev/null || break
+    sleep 0.1
+  done
   rm -rf "$DEST"
   cp -R "$APP" "$DEST"
-  open "$DEST"
+  open "$DEST" 2>/dev/null || { sleep 1; open "$DEST"; }
   echo "Installed and launched $DEST"
 fi
