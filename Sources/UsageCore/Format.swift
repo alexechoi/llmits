@@ -3,8 +3,15 @@ import Foundation
 public enum Format {
     /// Rounds down, so 99.6% reads as 99% and "100%" only ever means used up.
     public static func percent(_ value: Double?) -> String {
-        guard let value else { return "—" }
-        return "\(Int(value.rounded(.down)))%"
+        guard let whole = wholePercent(value) else { return "—" }
+        return "\(whole)%"
+    }
+
+    /// A percentage as a whole number that can't trap: finite, clamped to 0–1000, and nudged
+    /// so floating-point noise (0.29 × 100 = 28.999…) doesn't round down a whole point.
+    static func wholePercent(_ value: Double?) -> Int? {
+        guard let value, value.isFinite else { return nil }
+        return Int((min(max(value, 0), 1000) + 1e-9).rounded(.down))
     }
 
     /// "Resets in 42m", "Resets in 3h 5m", "Resets tomorrow 05:00" or "Resets Wed 05:00".
@@ -14,8 +21,7 @@ public enum Format {
         locale: Locale = .current,
         timeZone: TimeZone = .current
     ) -> String? {
-        guard let date, date > now else { return nil }
-        let minutes = Int((date.timeIntervalSince(now) / 60).rounded(.up))
+        guard let date, date > now, let minutes = minutesUntil(date, from: now) else { return nil }
         if minutes < 60 {
             return "Resets in \(minutes)m"
         }
@@ -26,7 +32,9 @@ public enum Format {
         if isTomorrow(rounded, now: now, timeZone: timeZone) {
             return "Resets tomorrow \(time(rounded, locale: locale, timeZone: timeZone))"
         }
-        return "Resets \(Formatters.date("EEEjjmm", locale: locale, timeZone: timeZone).string(from: rounded))"
+        // A weekday alone is ambiguous six or more days out ("Wed" could be today or next week).
+        let template = minutes < 6 * 24 * 60 ? "EEEjjmm" : "EEEdMMMjjmm"
+        return "Resets \(Formatters.date(template, locale: locale, timeZone: timeZone).string(from: rounded))"
     }
 
     /// The line under a row's bar: when it resets and whether usage is keeping pace, e.g.
@@ -69,15 +77,15 @@ public enum Format {
         case .warning: parts.append("Getting high")
         case .normal: break
         }
-        parts.append("\(Int(percent.rounded(.down))) percent used")
+        parts.append("\(wholePercent(percent) ?? 0) percent used")
         if let elapsed = row.elapsedFraction(at: now) {
             parts.append("\(Int((elapsed * 100).rounded())) percent of the \(spokenWindow(row.windowLength)) gone")
         }
         if let pace = pace(row.pace(at: now)) {
             parts.append(pace)
         }
-        if let resetsAt = row.resetsAt, resetsAt > now {
-            parts.append(spokenReset(resetsAt, now: now, locale: locale, timeZone: timeZone))
+        if let resetsAt = row.resetsAt, resetsAt > now, let reset = spokenReset(resetsAt, now: now, locale: locale, timeZone: timeZone) {
+            parts.append(reset)
         }
         if stale {
             parts.append("out of date")
@@ -96,6 +104,8 @@ public enum Format {
             return "You're offline. Retrying automatically."
         case .failed(.unreadable):
             return "Couldn't read \(service.name) usage. Try updating this app."
+        case .failed(.loginUnreadable):
+            return "Couldn't read your \(service.loginTool) login. Trying again shortly."
         case .failed(.server), .failed(.other):
             return "Couldn't load \(service.name) usage. Retrying automatically."
         }
@@ -177,7 +187,7 @@ public enum Format {
         case 86_400: return "Daily"
         case 604_800: return "Weekly"
         case 28 * 86_400 ... 31 * 86_400: return "Monthly"
-        case ..<3600: return "\(Int((Double(seconds) / 60).rounded()))-minute"
+        case ..<3600: return "\(max(1, Int((Double(seconds) / 60).rounded())))-minute"
         case ..<86_400: return "\(Int((Double(seconds) / 3600).rounded()))-hour"
         default: return "\(Int((Double(seconds) / 86_400).rounded()))-day"
         }
@@ -195,6 +205,13 @@ public enum Format {
     }
 
     // MARK: - Helpers
+
+    /// Whole minutes until a date, rounded up, or nil if it's absurdly far off.
+    private static func minutesUntil(_ date: Date, from now: Date) -> Int? {
+        let minutes = (date.timeIntervalSince(now) / 60).rounded(.up)
+        guard minutes.isFinite, minutes < 1_000_000_000 else { return nil }
+        return Int(minutes)
+    }
 
     /// Rounds rather than truncates, so a reset at 04:59:59.9 reads as 05:00.
     private static func roundedToMinute(_ date: Date) -> Date {
@@ -217,7 +234,9 @@ public enum Format {
         }
     }
 
-    private static func spokenReset(_ date: Date, now: Date, locale: Locale, timeZone: TimeZone) -> String {
+    private static func spokenReset(_ date: Date, now: Date, locale: Locale, timeZone: TimeZone) -> String? {
+        // Same rule as the visible caption: an absurdly distant date is treated as unknown.
+        guard minutesUntil(date, from: now) != nil else { return nil }
         let seconds = date.timeIntervalSince(now)
         if seconds < 24 * 3600 {
             let formatter = Formatters.duration(hours: seconds >= 3600, locale: locale)
@@ -229,7 +248,8 @@ public enum Format {
         if isTomorrow(rounded, now: now, timeZone: timeZone) {
             return "resets tomorrow at \(time(rounded, locale: locale, timeZone: timeZone))"
         }
-        return "resets \(Formatters.date("EEEEjjmm", locale: locale, timeZone: timeZone).string(from: rounded))"
+        let template = seconds < 6 * 86_400 ? "EEEEjjmm" : "EEEEdMMMMjjmm"
+        return "resets \(Formatters.date(template, locale: locale, timeZone: timeZone).string(from: rounded))"
     }
 }
 

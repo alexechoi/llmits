@@ -76,7 +76,7 @@ public struct ClaudeUsageResponse: Sendable, Equatable {
         case "weekly_scoped":
             return "Weekly · \(limit.scopeName ?? "scoped")"
         default:
-            let name = Format.limitName(limit.group ?? limit.kind)
+            let name = Format.limitName(limit.group ?? (limit.kind.isEmpty ? "limit" : limit.kind))
             return limit.scopeName.map { "\(name) · \($0)" } ?? name
         }
     }
@@ -135,8 +135,8 @@ extension ClaudeUsageResponse.Window: Decodable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        utilization = container.lenient(Double.self, .utilization)
-        resetsAt = container.lenient(String.self, .resetsAt).flatMap(ISODate.parse)
+        utilization = Sanitise.percent(container.number(.utilization))
+        resetsAt = container.lenient(String.self, .resetsAt).flatMap(ISODate.parse) ?? Sanitise.epoch(container.number(.resetsAt))
     }
 }
 
@@ -157,10 +157,10 @@ extension ClaudeUsageResponse.Limit: Decodable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         kind = try container.decode(String.self, forKey: .kind)
-        group = container.lenient(String.self, .group)
-        percent = container.lenient(Double.self, .percent)
-        severity = container.lenient(String.self, .severity)
-        resetsAt = container.lenient(String.self, .resetsAt).flatMap(ISODate.parse)
+        group = container.text(.group)
+        percent = Sanitise.percent(container.number(.percent))
+        severity = container.text(.severity)
+        resetsAt = container.lenient(String.self, .resetsAt).flatMap(ISODate.parse) ?? Sanitise.epoch(container.number(.resetsAt))
         if let scope = try? container.nestedContainer(keyedBy: ScopeKeys.self, forKey: .scope) {
             scopeName = Self.name(in: scope, .model) ?? Self.name(in: scope, .surface)
         }
@@ -168,10 +168,10 @@ extension ClaudeUsageResponse.Limit: Decodable {
 
     /// A scope entry may be a plain string or an object carrying a `display_name`.
     private static func name(in container: KeyedDecodingContainer<ScopeKeys>, _ key: ScopeKeys) -> String? {
-        if let name = container.lenient(String.self, key) {
+        if let name = container.text(key) {
             return name
         }
         let named = container.lenient(Named.self, key)
-        return named?.displayName ?? named?.id
+        return [named?.displayName, named?.id].compactMap { $0 }.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
 }

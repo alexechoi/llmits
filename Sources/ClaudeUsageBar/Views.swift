@@ -48,33 +48,66 @@ enum MenuMetrics {
     static var smallFont: NSFont { .menuFont(ofSize: NSFont.smallSystemFontSize) }
 }
 
-/// The menu bar icon: a ring that fills with usage (SF Symbols Variable Draw, macOS 26 and
-/// later) around a diamond, echoing the usage icon in the ChatGPT app.
+/// The menu bar icon: a ring that fills clockwise with usage around a diamond, echoing the usage
+/// icon in the ChatGPT app, with "!" in place of the diamond at critical so the state never
+/// depends on colour alone.
+///
+/// It's drawn by hand as a true template image (shapes and opacity only) so macOS can recolour it
+/// for light, dark and wallpaper-tinted menu bars, the highlighted state and Increase Contrast.
+/// SF Symbols' Variable Draw looked similar but always draws black, so it vanished on dark bars.
 enum StatusIcon {
-    static func image(fraction: Double, severity: Severity, tint: NSColor?) -> NSImage {
-        // A distinct glyph at critical, so the state never depends on colour alone.
-        let name = severity == .critical ? "exclamationmark.circle" : "diamond.circle"
-        let value = min(max(fraction, 0), 1)
-        let symbol = NSImage(systemSymbolName: name, variableValue: value, accessibilityDescription: "Usage limits")
-            ?? NSImage(systemSymbolName: "circle", accessibilityDescription: "Usage limits")!
+    static let size = NSSize(width: 16, height: 16)
 
-        // Weight-matched to the menu bar's text, at the large scale for emphasis.
-        var config = NSImage.SymbolConfiguration(
-            pointSize: NSFont.menuBarFont(ofSize: 0).pointSize,
-            weight: .regular,
-            scale: .large
-        )
-        if #available(macOS 26, *) {
-            config = config.applying(NSImage.SymbolConfiguration(variableValueMode: .draw))
+    static func image(fraction: Double, severity: Severity, tint: NSColor?) -> NSImage {
+        let fraction = fraction.isFinite ? min(max(fraction, 0), 1) : 0
+        let image = NSImage(size: size, flipped: false) { rect in
+            // Black in a template becomes the menu bar's own colour; a tint is drawn as-is.
+            let colour = tint ?? .black
+            let lineWidth: CGFloat = 1.6
+            let centre = NSPoint(x: rect.midX, y: rect.midY)
+            let radius = rect.width / 2 - lineWidth / 2 - 0.4
+
+            // The unused part of the ring, faint enough that the used part reads at a glance.
+            let track = NSBezierPath()
+            track.appendArc(withCenter: centre, radius: radius, startAngle: 0, endAngle: 360)
+            track.lineWidth = lineWidth
+            colour.withAlphaComponent(0.32).setStroke()
+            track.stroke()
+
+            if fraction > 0 {
+                // Clockwise from 12 o'clock. Any usage at all shows at least a short arc.
+                let sweep = 360 * max(fraction, 0.03)
+                let arc = NSBezierPath()
+                arc.appendArc(withCenter: centre, radius: radius, startAngle: 90, endAngle: 90 - sweep, clockwise: true)
+                arc.lineWidth = lineWidth
+                arc.lineCapStyle = .round
+                colour.setStroke()
+                arc.stroke()
+            }
+
+            colour.setFill()
+            if severity == .critical {
+                let bar = NSRect(x: centre.x - 0.85, y: centre.y - 0.6, width: 1.7, height: 4.2)
+                NSBezierPath(roundedRect: bar, xRadius: 0.85, yRadius: 0.85).fill()
+                NSBezierPath(ovalIn: NSRect(x: centre.x - 1, y: centre.y - 3.6, width: 2, height: 2)).fill()
+            } else {
+                let half: CGFloat = 3.1
+                let diamond = NSBezierPath()
+                diamond.move(to: NSPoint(x: centre.x, y: centre.y + half))
+                diamond.line(to: NSPoint(x: centre.x + half, y: centre.y))
+                diamond.line(to: NSPoint(x: centre.x, y: centre.y - half))
+                diamond.line(to: NSPoint(x: centre.x - half, y: centre.y))
+                diamond.close()
+                diamond.lineJoinStyle = .round
+                diamond.lineWidth = 0.8  // softens the corners, like SF Symbols' diamonds
+                diamond.fill()
+                colour.setStroke()
+                diamond.stroke()
+            }
+            return true
         }
-        if let tint {
-            // A single palette colour keeps the unfilled part of the ring dimmed; a hierarchical
-            // colour would dim the whole ring and hide the fill level.
-            config = config.applying(NSImage.SymbolConfiguration(paletteColors: [tint]))
-        }
-        let image = symbol.withSymbolConfiguration(config) ?? symbol
-        // A template lets the system adapt the icon to the menu bar and its selected state.
         image.isTemplate = tint == nil
+        image.accessibilityDescription = "Usage limits"
         return image
     }
 }
@@ -249,24 +282,27 @@ final class NoticeView: NSView {
 
     override var isFlipped: Bool { true }
 
-    init(text: String, detail: String?, showsIcon: Bool) {
+    init() {
         super.init(frame: NSRect(x: 0, y: 0, width: MenuMetrics.width, height: 24))
         icon.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: NSFont.smallSystemFontSize, weight: .medium))
         icon.contentTintColor = .secondaryLabelColor
-        icon.isHidden = !showsIcon
         textLabel.font = MenuMetrics.font
-        textLabel.stringValue = text
         detailLabel.font = MenuMetrics.smallFont
         detailLabel.textColor = .secondaryLabelColor
-        detailLabel.stringValue = detail ?? ""
-        detailLabel.isHidden = detail == nil
         for view in [icon, textLabel, detailLabel] {
             view.setAccessibilityElement(false)
             addSubview(view)
         }
         setAccessibilityElement(true)
         setAccessibilityRole(.staticText)
+    }
+
+    func update(text: String, detail: String?, showsIcon: Bool) {
+        icon.isHidden = !showsIcon
+        textLabel.stringValue = text
+        detailLabel.stringValue = detail ?? ""
+        detailLabel.isHidden = detail == nil
         setAccessibilityLabel([text, detail].compactMap { $0 }.joined(separator: ", "))
         layoutContent()
     }

@@ -1,6 +1,6 @@
 import Foundation
 
-public enum Severity: Int, Comparable, Sendable {
+public enum Severity: Int, Codable, Comparable, Sendable {
     case normal, warning, critical
 
     public static func < (lhs: Severity, rhs: Severity) -> Bool {
@@ -27,7 +27,7 @@ public enum Severity: Int, Comparable, Sendable {
 }
 
 /// One limit in the dropdown.
-public struct LimitRow: Sendable, Equatable, Identifiable {
+public struct LimitRow: Codable, Sendable, Equatable, Identifiable {
     public var id: String
     public var title: String
     /// `nil` when the window isn't open, e.g. no 5-hour session is in progress.

@@ -5,12 +5,19 @@ public actor ClaudeSource: UsageSource {
     public nonisolated let service = Service.claude
 
     static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+    /// How long a token read from the keychain is trusted before re-reading it, so an account
+    /// switch or sign-out in Claude Code shows up within minutes rather than at token expiry.
+    static let cacheLifetime: TimeInterval = 15 * 60
 
     private let loadCredentials: @Sendable () throws -> ClaudeCredentials
     private let get: @Sendable (URL, [String: String]) async throws -> HTTP.Reply
-    /// Reading the keychain means launching `security`, which costs far more than the request,
-    /// so the token stays in memory until it expires or is rejected.
+    /// Reading the keychain means launching `security`, which costs more than the request, so
+    /// the token stays in memory for a while rather than being read on every check.
     private var cached: ClaudeCredentials?
+    private var cachedAt: Date?
+    /// A token the server has turned down. It's never sent again; until Claude Code stores a
+    /// new one, checks only re-read the keychain.
+    private var rejectedToken: String?
 
     public init() {
         self.init(loadCredentials: ClaudeCredentialStore.load, get: HTTP.get)
@@ -29,13 +36,16 @@ public actor ClaudeSource: UsageSource {
     }
 
     private func fetch(now: Date, retryingRejectedToken: Bool) async -> FetchOutcome {
-        if cached.map({ $0.isExpired(at: now) }) ?? true {
-            cached = try? loadCredentials()
+        let cacheIsOld = cachedAt.map { now.timeIntervalSince($0) > Self.cacheLifetime || now < $0 } ?? true
+        if cached == nil || cached?.isExpired(at: now) == true || cacheIsOld || rejectedToken != nil {
+            if let outcome = reloadCredentials(at: now) {
+                return outcome
+            }
         }
         guard let credentials = cached else { return .notSignedIn }
 
         let plan = Format.claudePlan(subscriptionType: credentials.subscriptionType, rateLimitTier: credentials.rateLimitTier)
-        if credentials.isExpired(at: now) {
+        if credentials.isExpired(at: now) || credentials.accessToken == rejectedToken {
             return .tokenExpired(plan: plan)
         }
 
@@ -51,24 +61,48 @@ public actor ClaudeSource: UsageSource {
 
         switch reply.status {
         case 200:
+            rejectedToken = nil
             guard let usage = try? ClaudeUsageResponse.decode(reply.data) else {
                 return .failed(.unreadable)
             }
             return .success(ServiceUsage(service: .claude, plan: plan, rows: usage.rows(now: now)))
         case 401:
+            rejectedToken = credentials.accessToken
             // Claude Code may have renewed the token since it was cached: re-read it and, if it
             // changed, try once more.
-            cached = try? loadCredentials()
-            if retryingRejectedToken, let fresh = cached, fresh.accessToken != credentials.accessToken {
+            if let outcome = reloadCredentials(at: now) {
+                return outcome
+            }
+            if retryingRejectedToken, let fresh = cached, fresh.accessToken != rejectedToken {
                 return await fetch(now: now, retryingRejectedToken: false)
             }
-            cached = nil
             return .tokenExpired(plan: plan)
         case 403, 429:
             // Claude Code treats both as rate limiting on this endpoint.
             return .rateLimited(retryAfter: reply.retryAfter)
         case let status:
             return .failed(.server(status: status))
+        }
+    }
+
+    /// Re-reads the stored login into `cached`, returning an outcome to report instead of
+    /// fetching if there is one. Only a login that's genuinely missing means signed out.
+    private func reloadCredentials(at now: Date) -> FetchOutcome? {
+        do {
+            cached = try loadCredentials()
+            cachedAt = now
+            if cached?.accessToken != rejectedToken {
+                rejectedToken = nil
+            }
+            return nil
+        } catch CredentialError.notFound {
+            cached = nil
+            cachedAt = nil
+            rejectedToken = nil
+            return .notSignedIn
+        } catch {
+            // Keep any token in hand: it may still work once the login can be read again.
+            return .failed(.loginUnreadable)
         }
     }
 }

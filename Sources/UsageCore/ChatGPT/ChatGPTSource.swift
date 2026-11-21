@@ -9,6 +9,9 @@ public actor ChatGPTSource: UsageSource {
 
     private let loadCredentials: @Sendable () throws -> ChatGPTCredentials
     private let get: @Sendable (URL, [String: String]) async throws -> HTTP.Reply
+    /// A token the server has turned down. It's never sent again; until Codex stores a new one,
+    /// checks only re-read the login file.
+    private var rejectedToken: String?
 
     public init() {
         self.init(loadCredentials: ChatGPTCredentialStore.load, get: HTTP.get)
@@ -24,8 +27,19 @@ public actor ChatGPTSource: UsageSource {
 
     public func fetch(now: Date) async -> FetchOutcome {
         // A small file read, so it's re-read on every poll and always matches what Codex last wrote.
-        guard let credentials = try? loadCredentials() else { return .notSignedIn }
-        if credentials.isExpired(at: now) {
+        let credentials: ChatGPTCredentials
+        do {
+            credentials = try loadCredentials()
+        } catch CredentialError.notFound {
+            return .notSignedIn
+        } catch {
+            // Only a missing login means signed out; anything else is worth another try.
+            return .failed(.loginUnreadable)
+        }
+        if credentials.accessToken != rejectedToken {
+            rejectedToken = nil
+        }
+        if credentials.isExpired(at: now) || credentials.accessToken == rejectedToken {
             return .tokenExpired(plan: nil)
         }
 
@@ -43,6 +57,7 @@ public actor ChatGPTSource: UsageSource {
 
         switch reply.status {
         case 200:
+            rejectedToken = nil
             guard let usage = try? ChatGPTUsageResponse.decode(reply.data) else {
                 return .failed(.unreadable)
             }
@@ -52,6 +67,7 @@ public actor ChatGPTSource: UsageSource {
                 rows: usage.rows(now: now)
             ))
         case 401:
+            rejectedToken = credentials.accessToken
             return .tokenExpired(plan: nil)
         case 429:
             return .rateLimited(retryAfter: reply.retryAfter)

@@ -18,10 +18,22 @@ public struct ChatGPTCredentials: Sendable, Equatable {
 /// Strictly read-only, like the Claude side: Codex renews its own tokens.
 public enum ChatGPTCredentialStore {
     public static func load() throws -> ChatGPTCredentials {
-        guard let data = try? Data(contentsOf: authFile()) else {
+        try load(from: authFile())
+    }
+
+    static func load(from file: URL) throws -> ChatGPTCredentials {
+        guard FileManager.default.fileExists(atPath: file.path) else {
             throw CredentialError.notFound
         }
-        return try parse(data)
+        guard let data = try? Data(contentsOf: file) else {
+            throw CredentialError.unreadable
+        }
+        do {
+            return try parse(data)
+        } catch CredentialError.malformed {
+            // Most likely caught mid-write while Codex renews its token; try again shortly.
+            throw CredentialError.unreadable
+        }
     }
 
     static func authFile(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
@@ -32,25 +44,19 @@ public enum ChatGPTCredentialStore {
     }
 
     static func parse(_ data: Data) throws -> ChatGPTCredentials {
-        struct Stored: Decodable {
-            struct Tokens: Decodable {
-                var accessToken: String?
-                var accountId: String?
-            }
-            var tokens: Tokens?
-        }
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        guard let stored = try? decoder.decode(Stored.self, from: data) else {
+        // Read loosely: only the access token is essential.
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw CredentialError.malformed
         }
+        let tokens = root["tokens"] as? [String: Any]
         // An API-key login has no ChatGPT tokens, and no ChatGPT plan limits to show.
-        guard let token = stored.tokens?.accessToken, !token.isEmpty else {
+        guard let token = tokens?["access_token"] as? String, !token.isEmpty else {
             throw CredentialError.notFound
         }
+        let account = tokens?["account_id"]
         return ChatGPTCredentials(
             accessToken: token,
-            accountID: stored.tokens?.accountId,
+            accountID: (account as? String) ?? (account as? NSNumber)?.stringValue,
             expiresAt: JWT.expiry(of: token)
         )
     }

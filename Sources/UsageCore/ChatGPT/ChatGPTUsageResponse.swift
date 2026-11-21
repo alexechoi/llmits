@@ -78,7 +78,7 @@ extension ChatGPTUsageResponse: Decodable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        planType = container.lenient(String.self, .planType)
+        planType = container.text(.planType)
         rateLimit = container.lenient(RateLimit.self, .rateLimit)
         codeReviewRateLimit = container.lenient(RateLimit.self, .codeReviewRateLimit)
         additionalRateLimits = container.lenient([Lossy<NamedLimit>].self, .additionalRateLimits)?.compactMap(\.value)
@@ -106,10 +106,10 @@ extension ChatGPTUsageResponse.Window: Decodable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        usedPercent = container.lenient(Double.self, .usedPercent)
-        limitWindowSeconds = container.lenient(Int.self, .limitWindowSeconds)
-        resetAfterSeconds = container.lenient(Int.self, .resetAfterSeconds)
-        resetAt = container.lenient(Double.self, .resetAt).map { Date(timeIntervalSince1970: $0) }
+        usedPercent = Sanitise.percent(container.number(.usedPercent))
+        limitWindowSeconds = Sanitise.seconds(container.number(.limitWindowSeconds)).map { Int($0.rounded()) }
+        resetAfterSeconds = Sanitise.seconds(container.number(.resetAfterSeconds)).map { Int($0.rounded()) }
+        resetAt = Sanitise.epoch(container.number(.resetAt))
     }
 }
 
@@ -120,8 +120,8 @@ extension ChatGPTUsageResponse.NamedLimit: Decodable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        limitName = container.lenient(String.self, .limitName)
-        meteredFeature = container.lenient(String.self, .meteredFeature)
+        limitName = container.text(.limitName)
+        meteredFeature = container.text(.meteredFeature)
         rateLimit = container.lenient(ChatGPTUsageResponse.RateLimit.self, .rateLimit)
     }
 }

@@ -32,7 +32,22 @@ enum HTTP {
         return Reply(
             status: http?.statusCode ?? 0,
             data: data,
-            retryAfter: http?.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
+            retryAfter: retryAfter(http?.value(forHTTPHeaderField: "Retry-After"))
         )
+    }
+
+    /// A Retry-After header as seconds from now: either whole seconds or an HTTP date, clamped to
+    /// a day. Anything else (`inf`, `nan`, garbage) is ignored rather than trusted.
+    static func retryAfter(_ value: String?, now: Date = .now) -> TimeInterval? {
+        guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return nil }
+        if let seconds = Int(value) {
+            return TimeInterval(min(max(seconds, 0), 86_400))
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        guard let date = formatter.date(from: value) else { return nil }
+        return min(max(date.timeIntervalSince(now), 0), 86_400)
     }
 }

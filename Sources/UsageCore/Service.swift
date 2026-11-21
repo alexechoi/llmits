@@ -1,7 +1,7 @@
 import Foundation
 
 /// A service whose plan limits the app can show.
-public enum Service: String, CaseIterable, Sendable, Identifiable {
+public enum Service: String, CaseIterable, Codable, Sendable, Identifiable {
     case claude
     case chatGPT
 
@@ -24,7 +24,7 @@ public enum Service: String, CaseIterable, Sendable, Identifiable {
 }
 
 /// One service's limits as they were when fetched.
-public struct ServiceUsage: Sendable, Equatable {
+public struct ServiceUsage: Codable, Sendable, Equatable {
     public var service: Service
     /// The plan's display name, e.g. "Max 20x" or "Pro 100".
     public var plan: String?
@@ -59,12 +59,15 @@ public enum Failure: Sendable, Equatable {
     case server(status: Int)
     /// The service answered, but not in a shape the app understands.
     case unreadable
+    /// The tool's stored login exists but couldn't be read just now (e.g. the keychain was
+    /// briefly unavailable, or the login file was mid-write).
+    case loginUnreadable
     case other(String)
 
     init(_ error: any Error) {
         let offline: Set<URLError.Code> = [
             .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost,
-            .dnsLookupFailed, .timedOut, .dataNotAllowed, .internationalRoamingOff,
+            .dnsLookupFailed, .dataNotAllowed, .internationalRoamingOff,
         ]
         if let error = error as? URLError, offline.contains(error.code) {
             self = .offline
@@ -88,6 +91,10 @@ public protocol UsageSource: Sendable {
 }
 
 public enum CredentialError: Error, Equatable {
+    /// There's no login: the person isn't signed in. The only error that means "signed out".
     case notFound
+    /// A login exists but its contents aren't in a shape the app understands.
     case malformed
+    /// A login may exist but couldn't be read just now.
+    case unreadable
 }
