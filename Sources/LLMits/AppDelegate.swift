@@ -417,7 +417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let available = tracker.choices(at: now)
         let active = chosenLimits.intersection(available)
-        let tightest = reused("tightest") { actionItem("Tightest Limit", #selector(showTightestLimit)) }
+        let tightest = reused("tightest") { actionItem("Most Urgent Limit", #selector(showTightestLimit)) }
         tightest.state = active.isEmpty ? .on : .off
         items.append(tightest)
 

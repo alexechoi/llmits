@@ -4,7 +4,7 @@ See how much of your Claude and ChatGPT plans you've used, right in your Mac's m
 
 The name is LLM + limits, and it's pronounced "limits".
 
-<img src="docs/banner.png" alt="On the left, the LLMits menu open under its menu bar icon, listing Claude's and ChatGPT's limits, each with a usage bar, a pace mark and a reset time. On the right, the menu bar icon on light and dark menu bars: a grid of dots lit from the left at 35%, orange at 80%, every dot red at 100%, and two or three chosen limits as a row of dots each." width="830">
+<img src="docs/banner.png" alt="On the left, the LLMits menu bar icon, a grid of red dots beside 100%, above its open menu, which lists Claude's and ChatGPT's limits, each with a usage bar, a pace mark and a reset time. Top right: by default the icon shows your most urgent limit across Claude and ChatGPT. Its dots light up from the left, a column for every 20%, turn orange from 75% and all turn red from 90%. Bottom right: the Show in Menu Bar submenu with three limits ticked. Each becomes its own row of five dots, and together they make an icon showing 100%, the most urgent of the three." width="830">
 
 ## Install
 
@@ -29,7 +29,7 @@ To start LLMits whenever you log in, choose **Launch at Login** from its menu.
 ## Using it
 
 - **In the menu bar**, LLMits shows a small grid of dots and a percentage for your most urgent limit, across both services. The grid lights up from the left as you use the limit, a column for each fifth. It turns **orange** at 75%, and at 90% every dot lights up **red**. (If a service rates a limit itself, LLMits uses that instead.)
-- **To show other limits there**, choose up to three in **Show in Menu Bar**. One alone fills the grid. With two or three, each gets its own row of five dots that turns orange or red on its own, and the percentage is for the most urgent.
+- **To show other limits there**, tick up to three in **Show in Menu Bar** (choose **Most Urgent Limit** to go back). One alone fills the grid. With two or three, each gets its own row of five dots, a dot for each fifth used, that turns orange or red on its own, and the percentage is for the most urgent.
 - **Click it** to see every limit, grouped by service, with a bar and its reset time.
 - **The mark on each bar** shows how much of the time between resets has passed. A bar past its mark means you're using that limit faster than an even pace.
 - **LLMits checks your usage every 5 minutes.** It also checks when you open the menu, wake your Mac or choose **Refresh** (Command-R), unless its numbers are under 2 minutes old.

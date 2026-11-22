@@ -69,6 +69,8 @@ if [[ "${1:-}" == "--install" ]]; then
 
   rm -rf "$DEST"
   cp -R "$APP" "$DEST"
+  # The staging copy would otherwise show up in Spotlight and Launchpad as a second LLMits.
+  rm -rf "$APP"
   echo "Installed $DEST"
   # A launch failure isn't a failed install: the app is in place either way.
   if open "$DEST" 2>/dev/null || { sleep 1; open "$DEST" 2>/dev/null; }; then
