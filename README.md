@@ -4,7 +4,7 @@ See how much of your Claude and ChatGPT plans you've used, right in your Mac's m
 
 The name is LLM + limits, and it's pronounced "limits".
 
-<img src="docs/banner.png" alt="On the left, the LLMits menu bar icon, a grid of red dots beside 100%, above its open menu, which lists Claude's and ChatGPT's limits, each with a usage bar, a pace mark and a reset time. Top right: by default the icon shows your most urgent limit across Claude and ChatGPT. Its dots light up from the left, a column for every 20%, turn orange from 75% and all turn red from 90%. Bottom right: the Show in Menu Bar submenu with three limits ticked. Each becomes its own row of five dots, and together they make an icon showing 100%, the most urgent of the three." width="830">
+<img src="docs/llmits-banner.png" alt="On the left, the LLMits menu bar icon, a grid of red dots beside 100%, above its open menu, which lists Claude's and ChatGPT's limits, each with a usage bar, a pace mark and a reset time. Top right: by default the icon shows your most urgent limit across Claude and ChatGPT. Its dots light up from the left, a column for every 20%, turn orange from 75% and all turn red from 90%. Bottom right: the Show in Menu Bar submenu with three limits ticked. Each becomes its own row of five dots, and together they make an icon showing 100%, the most urgent of the three." width="830">
 
 ## Install
 
