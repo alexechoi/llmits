@@ -56,6 +56,9 @@ import Testing
         let soon = LimitRow(id: "a", title: "Weekly · Fable", percent: 93.6,
                             resetsAt: now.addingTimeInterval(3 * 3600 + 5 * 60), severity: .critical)
         #expect(Format.spokenTitle(soon) == "Weekly, Fable")
+        // The Show in Menu Bar items are labelled from titles alone.
+        #expect(Format.spokenTitle("Session (5h)") == "5-hour session")
+        #expect(Format.spokenTitle("Weekly · all models") == "Weekly, all models")
         #expect(Format.spokenValue(soon, now: now, locale: gb, timeZone: utc) == "Nearly used up, 93 percent used, resets in 3 hours, 5 minutes")
         #expect(Format.spokenValue(soon, stale: true, now: now, locale: gb, timeZone: utc).hasSuffix(", out of date"))
 

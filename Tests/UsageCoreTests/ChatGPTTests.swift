@@ -93,8 +93,10 @@ private func rows(_ json: String) throws -> [LimitRow] {
     }
 
     @Test func honoursCodexHome() {
-        #expect(ChatGPTCredentialStore.authFile(environment: ["CODEX_HOME": "/tmp/codex"]).path == "/tmp/codex/auth.json")
-        #expect(ChatGPTCredentialStore.authFile(environment: [:]).path.hasSuffix("/.codex/auth.json"))
+        #expect(ChatGPTCredentialStore.authFile(environment: ["CODEX_HOME": "/tmp/codex"], savedHome: nil).path == "/tmp/codex/auth.json")
+        #expect(ChatGPTCredentialStore.authFile(environment: [:], savedHome: "/tmp/saved").path == "/tmp/saved/auth.json")
+        #expect(ChatGPTCredentialStore.authFile(environment: ["CODEX_HOME": "/tmp/env"], savedHome: "/tmp/saved").path == "/tmp/env/auth.json")
+        #expect(ChatGPTCredentialStore.authFile(environment: [:], savedHome: nil).path.hasSuffix("/.codex/auth.json"))
     }
 }
 

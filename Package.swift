@@ -2,16 +2,16 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClaudeUsageBar",
+    name: "LLMits",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "ClaudeUsageBar", targets: ["ClaudeUsageBar"]),
+        .executable(name: "LLMits", targets: ["LLMits"]),
     ],
     targets: [
-        // Credentials, parsing and formatting: everything that can be tested without AppKit.
+        // Credentials, parsing, state and formatting: everything that can be tested without AppKit.
         .target(name: "UsageCore"),
         // The menu bar app itself.
-        .executableTarget(name: "ClaudeUsageBar", dependencies: ["UsageCore"]),
+        .executableTarget(name: "LLMits", dependencies: ["UsageCore"]),
         .testTarget(name: "UsageCoreTests", dependencies: ["UsageCore"]),
     ]
 )

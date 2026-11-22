@@ -36,9 +36,16 @@ public enum ChatGPTCredentialStore {
         }
     }
 
-    static func authFile(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
-        if let home = environment["CODEX_HOME"], !home.isEmpty {
-            return URL(filePath: home).appending(path: "auth.json")
+    /// Where Codex keeps its login: `$CODEX_HOME`, or, for launches that don't inherit a shell's
+    /// environment (login items, Finder), the `CODEX_HOME` the installer saw; else `~/.codex`.
+    static func authFile(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        savedHome: String? = UserDefaults.standard.string(forKey: "CodexHome")
+    ) -> URL {
+        for home in [environment["CODEX_HOME"], savedHome] {
+            if let home, !home.trimmingCharacters(in: .whitespaces).isEmpty {
+                return URL(filePath: (home as NSString).expandingTildeInPath).appending(path: "auth.json")
+            }
         }
         return FileManager.default.homeDirectoryForCurrentUser.appending(path: ".codex/auth.json")
     }

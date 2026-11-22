@@ -88,19 +88,22 @@ public struct LimitRow: Codable, Sendable, Equatable, Identifiable {
 }
 
 public enum UsageSummary {
-    /// The limit closest to being hit: the highest percentage, with ties broken by severity.
+    /// The limit closest to being hit: the most severe, then the fullest. A service's own rating
+    /// can weigh more than the percentage, so a warning outranks a fuller limit that isn't one,
+    /// and the menu bar's colour always shows the worst state anywhere.
     public static func tightest(_ rows: [LimitRow]) -> LimitRow? {
         rows.filter { $0.percent != nil }
-            .max { ($0.percent ?? 0, $0.severity) < ($1.percent ?? 0, $1.severity) }
+            .max { ($0.severity, $0.percent ?? 0) < ($1.severity, $1.percent ?? 0) }
     }
 
-    /// The tightest limit across several services, and which service it belongs to.
+    /// The tightest limit across several services, and which service it belongs to. Ties go to
+    /// the service listed first.
     public static func tightest(in usages: [ServiceUsage], now: Date = .now) -> (service: Service, row: LimitRow)? {
         var best: (service: Service, row: LimitRow)?
         for usage in usages {
             guard let row = tightest(usage.rows(at: now)) else { continue }
             if let current = best,
-               (row.percent ?? 0, row.severity) <= (current.row.percent ?? 0, current.row.severity) {
+               (row.severity, row.percent ?? 0) <= (current.row.severity, current.row.percent ?? 0) {
                 continue
             }
             best = (usage.service, row)

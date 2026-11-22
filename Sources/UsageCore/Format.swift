@@ -54,7 +54,11 @@ public enum Format {
 
     /// A row's title for VoiceOver, e.g. "Weekly, Fable" rather than reading out the "·".
     public static func spokenTitle(_ row: LimitRow) -> String {
-        row.title
+        spokenTitle(row.title)
+    }
+
+    public static func spokenTitle(_ title: String) -> String {
+        title
             .replacingOccurrences(of: "Session (5h)", with: "5-hour session")
             .replacingOccurrences(of: " · ", with: ", ")
     }

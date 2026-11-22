@@ -11,13 +11,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// What's known about each service, and the rules for what to fetch and show. Tested in UsageCore.
     private var tracker = UsageTracker()
     private var isRefreshing = false
+    /// A forced refresh asked for while another was under way, to run once that one ends.
+    private var pendingForcedRefresh = false
     private var isMenuOpen = false
+    /// What was last written to UserDefaults, so unchanged numbers aren't written again.
+    private var savedSnapshot: UsageTracker.Snapshot?
 
     /// Every menu item is kept and updated in place. An open menu's item list is only replaced
     /// when its structure changes, so it never jumps or loses the highlight under the pointer.
     private var reusableItems: [String: NSMenuItem] = [:]
     private lazy var refreshItem = actionItem("Refresh", #selector(refreshNow), key: "r")
     private lazy var launchAtLoginItem = actionItem("Launch at Login", #selector(toggleLaunchAtLogin))
+    /// Chooses which limits the menu bar shows. Its items are kept and updated in place too.
+    private lazy var menuBarItem: NSMenuItem = {
+        let item = NSMenuItem(title: "Show in Menu Bar", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: "Show in Menu Bar")
+        // Enabled by hand: once three limits are chosen, the rest are greyed out.
+        submenu.autoenablesItems = false
+        item.submenu = submenu
+        return item
+    }()
+    private var choiceItems: [String: NSMenuItem] = [:]
+    /// The limits chosen for the menu bar. Empty means the tightest limit, the default.
+    private var chosenLimits: Set<LimitChoice> = []
     private lazy var quitItem: NSMenuItem = {
         let item = NSMenuItem(title: "Quit \(appName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.target = NSApp
@@ -27,13 +43,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lastButton: ButtonContent?
     /// Asking ServiceManagement is a cross-process call, so it's checked once per menu opening.
     private var launchesAtLogin = false
-    /// One line per check, with no secrets: `log show --predicate 'subsystem == "<bundle id>"' --info`.
+    /// One line per check, with no secrets: `log show --predicate 'subsystem == "<bundle id>"'`.
     private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "LLMits", category: "usage")
 
     /// Where the last numbers are kept between launches (usage and times only).
     private static let savedUsageKey = "savedUsage"
     /// Whether the person turned on Launch at Login here, so it can be restored after an update.
     private static let launchAtLoginKey = "launchAtLogin"
+    /// The limits chosen for the menu bar, as "service/title".
+    private static let menuBarLimitsKey = "menuBarLimits"
 
     private var appName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "LLMits"
@@ -48,11 +66,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.button?.imagePosition = .imageLeading
         menu.delegate = self
         statusItem.menu = menu
-        // Start from the last numbers, so a relaunch never shows a blank menu bar.
+        // Start from the last numbers, so a relaunch never shows a blank menu bar (or asks a
+        // server again before it's ready).
         if let data = UserDefaults.standard.data(forKey: Self.savedUsageKey),
            let snapshot = UsageTracker.Snapshot.decode(data) {
-            tracker.restore(snapshot)
+            tracker.restore(snapshot, at: .now)
+            savedSnapshot = snapshot
         }
+        let stored = UserDefaults.standard.stringArray(forKey: Self.menuBarLimitsKey) ?? []
+        chosenLimits = Set(stored.compactMap(LimitChoice.init(stored:)).prefix(UsageTracker.menuBarLimit))
         render()
         restoreLaunchAtLogin()
 
@@ -73,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Task { @MainActor in await self?.refresh(force: true) }
         }
         // Region, clock and time zone changes all affect how times are written.
-        for name in [NSLocale.currentLocaleDidChangeNotification, .NSSystemTimeZoneDidChange, .NSSystemClockDidChange] {
+        for name in [NSLocale.currentLocaleDidChangeNotification, .NSSystemTimeZoneDidChange] {
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in
                     Format.clearCaches()
@@ -81,17 +103,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             }
         }
+        // A clock set back leaves checks scheduled far ahead; the tracker treats those as due.
+        NotificationCenter.default.addObserver(forName: .NSSystemClockDidChange, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                Format.clearCaches()
+                await self?.refresh(force: false)
+            }
+        }
     }
 
     // MARK: - Fetching
 
-    /// Fetches every service that's due, or all of them when `force` is set (except any that
-    /// asked to be left alone after rate limiting), concurrently.
+    /// Fetches every service that's due, concurrently. Forced (Refresh, opening the menu, waking),
+    /// it also fetches any without numbers from the last two minutes, but never one that's
+    /// backing off after a rate limit.
     private func refresh(force: Bool) async {
-        guard !isRefreshing else { return }
+        guard !isRefreshing else {
+            // Run once this one ends, for whatever it isn't fetching.
+            pendingForcedRefresh = pendingForcedRefresh || force
+            return
+        }
         let now = Date.now
         let due = tracker.servicesToFetch(from: sources.map(\.service), force: force, now: now)
-        guard !due.isEmpty else { return }
+        guard !due.isEmpty else {
+            // Nothing to fetch, but numbers may have gone out of date or a window reset.
+            render()
+            return
+        }
 
         isRefreshing = true
         render()  // shows "Updating…"
@@ -103,25 +141,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             for await (service, outcome) in group {
                 tracker.record(outcome, for: service, at: .now)
                 record(outcome, for: service)
-                switch outcome {
-                case .success, .notSignedIn:
-                    UserDefaults.standard.set(tracker.snapshot.encoded(), forKey: Self.savedUsageKey)
-                default:
-                    break
-                }
+                saveSnapshot()
                 render()
             }
         }
         isRefreshing = false
         render()
         releaseFreedMemory()
+        if pendingForcedRefresh {
+            pendingForcedRefresh = false
+            await refresh(force: true)
+        }
+    }
+
+    /// Keeps the last numbers, and any rate limit's wait, for the next launch.
+    private func saveSnapshot() {
+        let snapshot = tracker.snapshot
+        guard snapshot != savedSnapshot, let data = snapshot.encoded() else { return }
+        UserDefaults.standard.set(data, forKey: Self.savedUsageKey)
+        savedSnapshot = snapshot
     }
 
     private func record(_ outcome: FetchOutcome, for service: Service) {
         let name = service.name
         switch outcome {
         case let .success(usage):
-            log.info("\(name, privacy: .public): updated, \(usage.rows.count) limits")
+            // Notice rather than info, so every check stays in the log: macOS keeps info lines
+            // only briefly, in memory.
+            log.notice("\(name, privacy: .public): updated, \(usage.rows.count) limits")
         case .tokenExpired:
             log.notice("\(name, privacy: .public): login expired")
         case .notSignedIn:
@@ -137,48 +184,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func render() {
         let now = Date.now
-        updateButton(tracker.headline(at: now), now: now)
+        updateButton(now: now)
         if isMenuOpen {
             updateMenu(now: now)
         }
     }
 
     private struct ButtonContent: Equatable {
-        var fraction: Double
-        var severity: Severity
+        var rows: [StatusIcon.Row]
         var title: String
     }
 
-    private func updateButton(_ headline: UsageTracker.Headline?, now: Date) {
+    /// The menu bar item: the limits shown as dots (a 3 × 5 grid for one, a row of five each for
+    /// two or three), and the number of the tightest.
+    private func updateButton(now: Date) {
         guard let button = statusItem.button else { return }
-        let severity = headline?.row.severity ?? .normal
+        let shown = tracker.menuBarLimits(chosen: chosenLimits, at: now)
+        let allStale = !shown.isEmpty && shown.allSatisfy(\.isStale)
         let content = ButtonContent(
-            // Whole percents are plenty for a 16pt ring, and mean a redraw only when the number moves.
-            fraction: ((headline?.row.percent ?? 0).rounded(.down)) / 100,
-            severity: severity,
-            title: Format.percent(headline?.row.percent)
+            // Dots and whole percents mean a redraw only when something visible changes.
+            rows: shown.map { StatusIcon.Row(percent: $0.row.percent, severity: $0.row.severity, faded: $0.isStale && !allStale) },
+            title: Format.percent(UsageTracker.tightest(of: shown)?.row.percent)
         )
         if content != lastButton {
             // Colour goes on the icon only, never the text, so the percentage keeps the menu bar's
             // own contrast on any wallpaper. It stays even when the numbers are old: usage only
             // rises within a window, so an old reading is never worse than the truth.
-            button.image = StatusIcon.image(fraction: content.fraction, severity: severity, tint: severity.statusBarColor)
+            button.image = StatusIcon.image(rows: content.rows)
             button.title = content.title
             button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.menuBarFont(ofSize: 0).pointSize, weight: .regular)
             lastButton = content
         }
-        button.appearsDisabled = headline?.isStale ?? true
+        // Dimmed when everything it shows is out of date; one old row among current ones is fainter.
+        button.appearsDisabled = shown.isEmpty || allStale
 
         button.setAccessibilityLabel("Usage limits")
-        guard let headline else {
+        guard !shown.isEmpty else {
             button.setAccessibilityValue(tracker.isLoading ? "Loading" : "No data")
             button.toolTip = appName
             return
         }
-        let spoken = Format.spokenValue(headline.row, stale: headline.isStale, now: now)
-        button.setAccessibilityValue("\(headline.service.name), \(Format.spokenTitle(headline.row)): \(spoken)")
-        let caption = Format.caption(headline.row, now: now).map { "\n\($0)" } ?? ""
-        button.toolTip = "\(headline.service.name) \(headline.row.title): \(Format.percent(headline.row.percent))\(caption)"
+        button.setAccessibilityValue(shown.map {
+            "\($0.service.name), \(Format.spokenTitle($0.row)): \(Format.spokenValue($0.row, stale: $0.isStale, now: now))"
+        }.joined(separator: "; "))
+        button.toolTip = shown.map {
+            let caption = Format.caption($0.row, now: now).map { "\n\($0)" } ?? ""
+            // Says why a row is faded, as VoiceOver does.
+            let stale = $0.isStale ? " (out of date)" : ""
+            return "\($0.service.name) \($0.row.title): \(Format.percent($0.row.percent))\(stale)\(caption)"
+        }.joined(separator: "\n\n")
     }
 
     /// Updates the menu's contents in place, rebuilding its item list only if its shape changed.
@@ -192,8 +246,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return (item, view)
             }
             let view = make()
-            let item = NSMenuItem()
+            // No title: AppKit sizes the menu from titles even for view items, so one would widen
+            // it past the rows. Each view carries its own accessibility label instead.
+            let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
             item.view = view
+            // Informational: arrow keys skip it rather than landing on an invisible highlight.
+            item.isEnabled = false
             reusableItems[key] = item
             return (item, view)
         }
@@ -231,8 +289,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 items.append(separator("separator.\(service.rawValue)"))
             }
             let (header, headerView) = reused("header.\(service.rawValue)") { SectionHeaderView() }
-            headerView.update(title: [service.name, state.plan].compactMap { $0 }.joined(separator: " "),
-                              logo: ServiceLogo.image(for: service))
+            let headerTitle = [service.name, state.plan].compactMap { $0 }.joined(separator: " ")
+            headerView.update(title: headerTitle, logo: ServiceLogo.image(for: service))
             items.append(header)
 
             // The explanation comes first, above the numbers it qualifies.
@@ -246,7 +304,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let stale = tracker.isStale(service, at: now)
             let rows = state.usage?.rows(at: now) ?? []
             for row in rows {
-                let (item, view) = reused("row.\(service.rawValue).\(row.id)") { LimitRowView() }
+                let key = "row.\(service.rawValue).\(row.id)"
+                // The same item twice would make AppKit throw and drop the rest of the menu.
+                guard !used.contains(key) else { continue }
+                let (item, view) = reused(key) { LimitRowView() }
                 view.update(row: row, stale: stale, now: now)
                 items.append(item)
             }
@@ -259,8 +320,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         items.append(separator("separator.actions"))
         let lastUpdated = services.compactMap { tracker.state(of: $0)?.lastUpdated }.max()
         let status = isRefreshing ? "Updating…" : lastUpdated.map { "Updated \(Format.time($0))" }
-        if #available(macOS 14.4, *) {
-            refreshItem.subtitle = status
+        // `subtitle` runs on macOS 14.4 and later but isn't in every SDK this can be built with, so
+        // it's set by name when the running system has it.
+        if refreshItem.responds(to: NSSelectorFromString("setSubtitle:")) {
+            refreshItem.setValue(status, forKey: "subtitle")
         } else if let status {
             used.insert("info.updated")
             let info = reusableItems["info.updated"] ?? NSMenuItem(title: "", action: nil, keyEquivalent: "")
@@ -269,6 +332,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             items.append(info)
         }
         items.append(refreshItem)
+        updateMenuBarChoices(now: now)
+        items.append(menuBarItem)
         if isBundledApp {
             launchAtLoginItem.state = launchesAtLogin ? .on : .off
         } else {
@@ -280,8 +345,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         items.append(quitItem)
 
         reusableItems = reusableItems.filter { used.contains($0.key) }
-        if menu.items.map(ObjectIdentifier.init) != items.map(ObjectIdentifier.init) {
-            menu.items = items
+        apply(items, to: menu)
+    }
+
+    /// Makes the menu's items match `items` with the fewest insertions and removals. Replacing the
+    /// whole list would drop the keyboard highlight and can leave an open menu mis-sized.
+    private func apply(_ items: [NSMenuItem], to menu: NSMenu) {
+        guard menu.items.map(ObjectIdentifier.init) != items.map(ObjectIdentifier.init) else { return }
+        let wanted = Set(items.map(ObjectIdentifier.init))
+        for item in menu.items.reversed() where !wanted.contains(ObjectIdentifier(item)) {
+            menu.removeItem(item)
+        }
+        for (index, item) in items.enumerated() {
+            if index < menu.items.count, menu.items[index] === item {
+                continue
+            }
+            if item.menu === menu {
+                menu.removeItem(item)
+            }
+            menu.insertItem(item, at: index)
         }
     }
 
@@ -297,9 +379,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         isMenuOpen = true
-        if !tracker.isFresh(at: .now) {
-            Task { await refresh(force: true) }
-        }
+        // Only services without numbers from the last two minutes are fetched.
+        Task { await refresh(force: true) }
     }
 
     func menuDidClose(_ menu: NSMenu) {
@@ -318,10 +399,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// The Show in Menu Bar submenu: the tightest limit (the default), then every limit under its
+    /// service, up to three of which can be ticked.
+    private func updateMenuBarChoices(now: Date) {
+        guard let submenu = menuBarItem.submenu else { return }
+        var items: [NSMenuItem] = []
+        var used = Set<String>()
+        func reused(_ key: String, _ make: () -> NSMenuItem) -> NSMenuItem {
+            used.insert(key)
+            if let item = choiceItems[key] {
+                return item
+            }
+            let item = make()
+            choiceItems[key] = item
+            return item
+        }
+
+        let available = tracker.choices(at: now)
+        let active = chosenLimits.intersection(available)
+        let tightest = reused("tightest") { actionItem("Tightest Limit", #selector(showTightestLimit)) }
+        tightest.state = active.isEmpty ? .on : .off
+        items.append(tightest)
+
+        let full = active.count >= UsageTracker.menuBarLimit
+        for service in Service.allCases {
+            let choices = available.filter { $0.service == service }
+            guard !choices.isEmpty else { continue }
+            items.append(reused("separator.\(service.rawValue)") { .separator() })
+            items.append(reused("header.\(service.rawValue)") { .sectionHeader(title: service.name) })
+            for choice in choices {
+                let key = "choice.\(choice.stored)"
+                // The same item twice would make AppKit throw.
+                guard !used.contains(key) else { continue }
+                let item = reused(key) {
+                    let item = actionItem(choice.title, #selector(toggleMenuBarLimit(_:)))
+                    // Section headers are skipped by arrow keys and VoiceOver, so the service goes here.
+                    item.setAccessibilityLabel("\(choice.service.name), \(Format.spokenTitle(choice.title))")
+                    return item
+                }
+                item.representedObject = choice.stored
+                item.state = active.contains(choice) ? .on : .off
+                // Three rows of dots is all the menu bar has room for; say so on the greyed-out rest.
+                item.isEnabled = item.state == .on || !full
+                item.toolTip = item.isEnabled ? nil : "The menu bar shows up to three limits. Untick one to show this one instead."
+                items.append(item)
+            }
+        }
+        choiceItems = choiceItems.filter { used.contains($0.key) }
+        apply(items, to: submenu)
+    }
+
     // MARK: - Actions
 
     @objc private func refreshNow() {
         Task { await refresh(force: true) }
+    }
+
+    @objc private func showTightestLimit() {
+        chosenLimits = []
+        saveChosenLimits()
+    }
+
+    @objc private func toggleMenuBarLimit(_ sender: NSMenuItem) {
+        guard let stored = sender.representedObject as? String, let choice = LimitChoice(stored: stored) else { return }
+        chosenLimits = tracker.toggling(choice, in: chosenLimits, at: .now)
+        saveChosenLimits()
+    }
+
+    private func saveChosenLimits() {
+        UserDefaults.standard.set(chosenLimits.map(\.stored).sorted(), forKey: Self.menuBarLimitsKey)
+        render()
     }
 
     private var isBundledApp: Bool {

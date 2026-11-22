@@ -1,121 +1,115 @@
-# Claude Usage Bar
+# LLMits
 
 See how much of your Claude and ChatGPT plans you've used, right in your Mac's menu bar.
 
-<img src="docs/screenshot.png" alt="The menu bar shows a red exclamation ring at 100%. Its menu has a Claude Max 20x section, headed by the Claude logo, (5-hour session not started; weekly all models 62%, resets Wednesday, ahead of pace; weekly Fable 100% in red) and a ChatGPT Pro 100 section headed by the OpenAI logo (weekly 35%, resets Tuesday, on track), then Refresh, Launch at Login and Quit." width="320">
+The name is LLM + limits, and it's pronounced "limits".
+
+<img src="docs/banner.png" alt="On the left, the LLMits menu open under its menu bar icon, listing Claude's and ChatGPT's limits, each with a usage bar, a pace mark and a reset time. On the right, the menu bar icon on light and dark menu bars: a grid of dots lit from the left at 35%, orange at 80%, every dot red at 100%, and two or three chosen limits as a row of dots each." width="830">
 
 ## Install
 
-Paste this into Terminal:
+You'll need:
+
+- **macOS Sonoma 14.5 or later.**
+- **Claude Code or the Codex CLI (or both), signed in.** LLMits uses their logins, so there's nothing else to set up. To keep a login current, use its tool now and then, and sign in again when it asks.
+  - **For Claude:** install [Claude Code](https://code.claude.com), run `claude` and sign in with a Claude subscription such as Pro or Max (type `/login` if it doesn't ask).
+  - **For ChatGPT:** install the [Codex CLI](https://github.com/openai/codex), then run `codex login` and sign in with your ChatGPT account.
+- **Apple's Command Line Tools** (or Xcode), to build the app. If they're missing, macOS offers to install them; run the installer again once that's done.
+
+Then paste this into Terminal:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/karannavani/claude-usage-bar/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/karannavani/llmits/main/install.sh | bash
 ```
 
-That's it. The installer checks your Mac has what it needs, builds the app, puts it in `~/Applications` and starts it. It takes about a minute. You're welcome to [read the script](install.sh) first.
+In about a minute, it checks your Mac has what it needs, builds LLMits into the Applications folder in your home folder and opens it. You're welcome to [read the script](install.sh) first.
 
-To have it start whenever you log in, click the icon and choose **Launch at Login**.
-
-### What you need
-
-- **macOS 14 Sonoma or later.** On macOS 26 Tahoe or later, the menu bar ring also fills up as you use your limit.
-- **At least one of these logins**, which the app reads, so there's nothing else to set up:
-  - **For Claude:** [Claude Code](https://code.claude.com) signed in with a Claude subscription such as Pro or Max. Install it, run `claude`, then type `/login`.
-  - **For ChatGPT:** the [Codex CLI](https://github.com/openai/codex) signed in with your ChatGPT account. Install it, then run `codex login`.
-- **Apple's Command Line Tools**, to build the app. If they're missing, the installer opens Apple's installer for you; run the command again once it's done.
+To start LLMits whenever you log in, choose **Launch at Login** from its menu.
 
 ## Using it
 
-- **The menu bar** shows the limit you're closest to hitting, across both services. It turns **orange** as that limit gets high and **red with a ! symbol** when it's nearly used up. These follow the service's own rating where it gives one, or 75% and 90% otherwise.
-- **Click it** to see every limit, grouped by service: for Claude, the 5-hour session, your weekly limit across all models and any per-model weekly limits; for ChatGPT, your plan's usage windows. Each shows how much you've used and when it resets.
-- **Only what you use appears.** A service shows up once you're signed in to its tool, and disappears if you sign out.
-- **The mark on each bar** shows an even pace: how much of that window has passed. If your bar reaches past it, you're using the limit faster than the window runs out, and the caption says **ahead of pace**; otherwise it says **on track**. Each service's windows start at different times, so their marks sit in different places.
-- **It updates itself** every 2 minutes, when your Mac wakes, and when you open the menu. Choose **Refresh** (⌘R) to update straight away; it shows when the numbers were last updated.
-- **Out-of-date numbers** grey out the menu bar icon and that service's bars, and a note at the top of its section says why and what happens next.
-- **To remove it**, choose **Quit Claude Usage Bar**, or hold ⌘ and drag the icon out of the menu bar.
+- **In the menu bar**, LLMits shows a small grid of dots and a percentage for your most urgent limit, across both services. The grid lights up from the left as you use the limit, a column for each fifth. It turns **orange** at 75%, and at 90% every dot lights up **red**. (If a service rates a limit itself, LLMits uses that instead.)
+- **To show other limits there**, choose up to three in **Show in Menu Bar**. One alone fills the grid. With two or three, each gets its own row of five dots that turns orange or red on its own, and the percentage is for the most urgent.
+- **Click it** to see every limit, grouped by service, with a bar and its reset time.
+- **The mark on each bar** shows how much of the time between resets has passed. A bar past its mark means you're using that limit faster than an even pace.
+- **LLMits checks your usage every 5 minutes.** It also checks when you open the menu, wake your Mac or choose **Refresh** (Command-R), unless its numbers are under 2 minutes old.
+- **If a check fails**, the last numbers stay, with a note saying what happened. After 15 minutes without an update, that service's bars grey out, and its dots in the menu bar fade.
+- **Each service appears** within 5 minutes of you signing in to its tool. If you sign out or switch accounts, LLMits can take about 20 minutes to notice.
+- **To quit**, choose **Quit LLMits**, or hold Command and drag the icon out of the menu bar. To open it again, search for LLMits in Spotlight.
 
 ## Troubleshooting
 
-| What you see | What to do |
+| What you see | What it means |
 | --- | --- |
-| No icon in the menu bar | If you use a menu bar manager such as Bartender or Ice, look in its hidden section. On a crowded menu bar (especially beside a notch), macOS hides some icons; on macOS 26 or later, also check **System Settings → Menu Bar**. |
-| A service is missing | Sign in to its tool: `claude` then `/login` for Claude, or `codex login` for ChatGPT. A Codex login that uses an OpenAI API key has no ChatGPT plan limits to show. |
-| "Token expired" | Normal if you haven't used Claude Code or Codex for a while. Use it once and the app catches up within a minute. |
-| "Rate limited" | Nothing to do; it waits and tries again on its own. |
-| The installer says Swift 6 is needed | Update Xcode or the Command Line Tools in **System Settings → General → Software Update**. |
+| No icon in the menu bar | LLMits may not be running: open it from Spotlight. If you use a menu bar manager such as Bartender or Ice, look in its hidden section. macOS also hides icons when the menu bar is crowded, especially beside the notch. On macOS Tahoe 26 or later, make sure LLMits is allowed in **System Settings > Menu Bar**. |
+| A service is missing | Sign in to its tool (see [Install](#install)). A Codex login that uses an OpenAI API key has no ChatGPT plan limits to show. If you keep Codex's files somewhere other than `~/.codex`, install with `CODEX_HOME` set. |
+| "Login expired. Run Claude Code to renew it." | Normal if you haven't used Claude Code for a while. Run it once (signing in again if it asks) and LLMits catches up within a minute. For ChatGPT, run Codex instead. |
+| "Too many requests. Retrying at 21:15." | The service asked for fewer checks. LLMits waits until then, even after a restart, and longer (up to an hour) if it keeps happening. |
+| "Couldn't read your Claude Code login. Trying again shortly." | The keychain (or Codex's login file) couldn't be read, for example straight after waking. LLMits tries again in a minute. |
+| "You're offline. Retrying automatically." | LLMits tries again every minute. |
+| The installer mentions Xcode or Swift | If it says Swift 6 or later is required, update the Command Line Tools in **System Settings > General > Software Update** (or Xcode, in the App Store). If it mentions Xcode's licence, run `sudo xcodebuild -license accept` and enter your Mac's password. Then run the installer again. |
+
+LLMits logs a line for each check (never any login details). To see the last hour:
+
+```bash
+/usr/bin/log show --last 1h --predicate 'subsystem == "io.github.karannavani.llmits"'
+```
 
 ## Update
 
-Run the install command again. It replaces the app with the latest version and restarts it.
+Run the install command again. It installs the latest version, restarts LLMits and removes Claude Usage Bar (its old name) if you have it. If Claude Usage Bar started at login, turn on **Launch at Login** again from LLMits's menu, and remove the old entry in **System Settings > General > Login Items** if it's still there.
 
 ## Uninstall
 
-First untick **Launch at Login** if you turned it on. Then run:
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/karannavani/claude-usage-bar/main/install.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/karannavani/llmits/main/install.sh | bash -s -- --uninstall
 ```
+
+If you turned on Launch at Login, also remove LLMits in **System Settings > General > Login Items**.
 
 ## How it works
 
-- **Claude:** it reads the login token Claude Code keeps in your macOS keychain (the `Claude Code-credentials` item) using the built-in `security` tool, then asks `https://api.anthropic.com/api/oauth/usage`, the endpoint behind Claude Code's `/usage` command.
-- **ChatGPT:** it reads the ChatGPT login the Codex CLI keeps in `~/.codex/auth.json` (or `$CODEX_HOME`), then asks `https://chatgpt.com/backend-api/wham/usage`, the endpoint the Codex CLI uses. The limits there are your ChatGPT plan's, not just Codex's.
-- Neither endpoint is publicly documented, and either may change without notice, so the app is deliberately tolerant of fields it doesn't recognise.
-- **It only ever reads the tokens.** Each tool renews its own tokens when you use it. The app never renews or changes them, so it can't interfere with Claude Code or Codex or sign you out.
+- **Claude:** LLMits reads the login Claude Code keeps in your keychain (the `Claude Code-credentials` item) with macOS's `security` tool, then asks `https://api.anthropic.com/api/oauth/usage`, the endpoint behind Claude Code's `/usage` command.
+- **ChatGPT:** it reads the login the Codex CLI keeps in `~/.codex/auth.json`, then asks `https://chatgpt.com/backend-api/wham/usage`, the endpoint Codex uses. Codex shares these limits with other parts of your ChatGPT plan, such as ChatGPT Work.
+- **It only reads these logins.** It never renews or changes them; each tool renews its own when you use it.
+- **It's light:** about 16 MB of memory (22 MB once you've opened the menu), and no CPU between checks.
 
 ### Privacy
 
-Your Claude token is only ever sent to `api.anthropic.com`, and your ChatGPT token only to `chatgpt.com`. The app stores nothing, and has no analytics or other network traffic.
+Your Claude login is only ever sent to `api.anthropic.com`, and your ChatGPT login only to `chatgpt.com`. Apart from its settings, LLMits keeps only the last numbers it showed (and any wait a service asked for) and a log line for each check. It has no analytics or other network traffic.
 
 ## Design
 
-The app follows Apple's [Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/the-menu-bar) for menu bar extras, as of macOS 27:
+LLMits follows Apple's [Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/the-menu-bar) for menu bar extras:
 
-- The icon is an SF Symbol drawn in the menu bar's own colours, so it adapts to light and dark menu bars and Liquid Glass. Its ring uses SF Symbols 7's Variable Draw to fill with your usage.
-- Colour is used sparingly, for status only, and only on the icon. The percentage keeps the menu bar's standard text colour so it stays readable on any wallpaper. Critical also changes the icon's shape, so the state never depends on colour alone.
-- Clicking opens a standard menu rather than a popover, with each service's section headed by its logo and plan. The logos are single-colour, in the header's own grey, and otherwise unaltered. Bars stay neutral while all's well, so orange and red only ever mean trouble, and percentages keep full-contrast text.
-- Warning and critical limits also get their own glyphs, and every limit has a VoiceOver label and value, such as "Weekly, Fable: Limit reached, 100 percent used, resets Wednesday 05:00".
-- Messages say what happens next ("You're offline. Retrying automatically."), and an out-of-date service never hides a live warning from another.
-- You decide whether it's in your menu bar: ⌘-drag it out to remove it, and Launch at Login is off until you turn it on.
-
-### Lightweight
-
-It uses about 20 MB of memory and no CPU between its checks: no timers tick while it's idle, and its menu is only built when you open it. Its rows are plain AppKit views; SwiftUI versions looked the same but cost 7–8 MB more.
+- Its menu bar icon adapts to light, dark and tinted menu bars.
+- Colour only ever means a warning, and a critical limit also lights all its dots.
+- Every limit has a full VoiceOver description, with its usage, pace and reset time.
+- Launch at Login stays off until you turn it on.
+- The app icon is a layered Liquid Glass icon that adapts to each of macOS's icon styles.
 
 ## Development
 
 ```bash
-git clone https://github.com/karannavani/claude-usage-bar.git
+git clone https://github.com/karannavani/llmits.git
+cd llmits
+./install.sh
 ```
 
-```bash
-cd claude-usage-bar && ./install.sh
-```
-
-Running `./install.sh` from a clone builds and installs that checkout. While working on it:
-
-```bash
-swift test
-```
-
-```bash
-swift run
-```
-
-`swift run` starts the app without bundling it, so **Launch at Login** is unavailable there.
+Running `./install.sh` from a clone builds and installs that checkout. While you work, `swift test` runs the tests, and `swift run` starts the app without bundling it (so without Launch at Login or the section logos).
 
 | Path | What's there |
 | --- | --- |
-| `Sources/UsageCore` | One usage source per service (`Claude/`, `ChatGPT/`): credentials, response decoding and rows; plus the shared limit model and formatting. No AppKit, and fully unit-tested. |
-| `Sources/ClaudeUsageBar` | The menu bar item, the menu, and its custom AppKit rows and notices. |
-| `Support/Info.plist` | Bundle metadata (`LSUIElement`, so there's no Dock icon). |
-| `Support/Logos` | The Claude and OpenAI marks shown beside each section, with where they came from. |
-| `scripts/build-app.sh` | Builds `build/Claude Usage Bar.app`; `--install` also copies it to `~/Applications` and launches it. |
+| `Sources/UsageCore` | Each service's logins, requests and responses (`Claude/`, `ChatGPT/`), the `UsageTracker` that decides what to fetch and show, and formatting. No AppKit, and unit-tested. |
+| `Sources/LLMits` | The menu bar item and its menu. |
+| `Support` | The app's `Info.plist`; its icon, as made in Icon Composer (`AppIcon.icon`) and compiled (`CompiledIcon`); and the Claude and OpenAI logos with their sources (`Logos`). |
+| `scripts/build-app.sh` | Builds `build/LLMits.app`; `--install` also copies it to `~/Applications` and opens it. |
+| `scripts/build-icon.sh` | Compiles `AppIcon.icon` into `CompiledIcon` (needs Xcode 26 or later). Run it after changing the icon and commit the result, so the app builds without Xcode. |
 | `install.sh` | The one-line installer and uninstaller. |
 
 ## Disclaimer
 
-Unofficial and not affiliated with or endorsed by Anthropic or OpenAI. Claude and the Claude logo are trademarks of Anthropic; ChatGPT, Codex and the OpenAI logo are trademarks of OpenAI. The logos in [`Support/Logos`](Support/Logos) come from each company's own brand resources and aren't covered by the MIT licence. The app relies on undocumented endpoints, so it may stop working at any time.
+LLMits is unofficial and not affiliated with or endorsed by Anthropic or OpenAI. It relies on undocumented endpoints, so it may stop working at any time. Claude and the Claude logo are trademarks of Anthropic; ChatGPT, Codex and the OpenAI logo are trademarks of OpenAI. The logos in [`Support/Logos`](Support/Logos) come from each company's own brand resources and aren't covered by the MIT licence.
 
 ## Licence
 

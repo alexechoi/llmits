@@ -6,7 +6,7 @@ import UsageCore
 
 extension Severity {
     /// Only the menu bar icon is tinted, and only when a limit needs attention, so colour stays
-    /// reserved for status as Apple's guidelines ask. `nil` keeps the system's own rendering.
+    /// reserved for status as Apple's guidelines ask. `nil` means the menu bar's own colour.
     var statusBarColor: NSColor? {
         switch self {
         case .normal: nil
@@ -19,7 +19,7 @@ extension Severity {
     /// colour could be red or orange and read as a warning).
     var barColor: NSColor {
         switch self {
-        case .normal: .secondaryLabelColor
+        case .normal: MenuColors.barFill
         case .warning: .systemOrange
         case .critical: .systemRed
         }
@@ -35,6 +35,14 @@ extension Severity {
     }
 }
 
+/// Fills for the capacity bars, strong enough to read against their track (3:1 or better).
+enum MenuColors {
+    static let barFill = NSColor(name: nil) { appearance in
+        NSColor.labelColor.withAlphaComponent(appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? 0.62 : 0.6)
+    }
+    static let staleFill = NSColor(name: nil) { _ in NSColor.labelColor.withAlphaComponent(0.32) }
+}
+
 /// Measurements shared by the custom menu views, matched to macOS 27's standard menu items.
 enum MenuMetrics {
     static let width: CGFloat = 280
@@ -48,65 +56,79 @@ enum MenuMetrics {
     static var smallFont: NSFont { .menuFont(ofSize: NSFont.smallSystemFontSize) }
 }
 
-/// The menu bar icon: a ring that fills clockwise with usage around a diamond, echoing the usage
-/// icon in the ChatGPT app, with "!" in place of the diamond at critical so the state never
-/// depends on colour alone.
+/// The menu bar icon: a grid of dots, lit with usage. One limit fills a 3 × 5 grid column by
+/// column from the left (each column a fifth); two or three limits get a row of five each, lit
+/// from the left. A critical limit lights all its dots, so that state never depends on colour alone.
 ///
-/// It's drawn by hand as a true template image (shapes and opacity only) so macOS can recolour it
-/// for light, dark and wallpaper-tinted menu bars, the highlighted state and Increase Contrast.
-/// SF Symbols' Variable Draw looked similar but always draws black, so it vanished on dark bars.
+/// While every limit is normal it's a true template image (shapes and opacity only), so macOS can
+/// recolour it for light, dark and wallpaper-tinted menu bars, the highlighted state and Increase
+/// Contrast. A limit that needs attention is tinted orange or red; the rest then use the menu
+/// bar's own text colour, resolved each time the image is drawn.
 enum StatusIcon {
-    static let size = NSSize(width: 16, height: 16)
+    struct Row: Equatable {
+        /// Dots lit out of five, for a row of its own.
+        var lit: Int
+        /// Dots lit out of fifteen, for the whole grid when it's the only limit shown.
+        var cells: Int
+        var severity: Severity
+        /// Out of date while others aren't, so drawn fainter.
+        var faded: Bool
 
-    static func image(fraction: Double, severity: Severity, tint: NSColor?) -> NSImage {
-        let fraction = fraction.isFinite ? min(max(fraction, 0), 1) : 0
-        let image = NSImage(size: size, flipped: false) { rect in
-            // Black in a template becomes the menu bar's own colour; a tint is drawn as-is.
-            let colour = tint ?? .black
-            let lineWidth: CGFloat = 1.6
-            let centre = NSPoint(x: rect.midX, y: rect.midY)
-            let radius = rect.width / 2 - lineWidth / 2 - 0.4
+        init(percent: Double?, severity: Severity, faded: Bool) {
+            self.lit = StatusIcon.litDots(percent: percent, severity: severity, of: StatusIcon.dots)
+            self.cells = StatusIcon.litDots(percent: percent, severity: severity, of: StatusIcon.dots * StatusIcon.gridRows)
+            self.severity = severity
+            self.faded = faded
+        }
+    }
 
-            // The unused part of the ring, faint enough that the used part reads at a glance.
-            let track = NSBezierPath()
-            track.appendArc(withCenter: centre, radius: radius, startAngle: 0, endAngle: 360)
-            track.lineWidth = lineWidth
-            colour.withAlphaComponent(0.32).setStroke()
-            track.stroke()
+    static let dots = 5
+    static let gridRows = 3
+    /// Whole pixels at 2x: 7 px dots with 3 px gaps, three rows in 13.5 of the bar's 16 points.
+    static let diameter: CGFloat = 3.5
+    static let gap: CGFloat = 1.5
+    static let size = NSSize(width: 24, height: 16)
 
-            if fraction > 0 {
-                // Clockwise from 12 o'clock. Any usage at all shows at least a short arc.
-                let sweep = 360 * max(fraction, 0.03)
-                let arc = NSBezierPath()
-                arc.appendArc(withCenter: centre, radius: radius, startAngle: 90, endAngle: 90 - sweep, clockwise: true)
-                arc.lineWidth = lineWidth
-                arc.lineCapStyle = .round
-                colour.setStroke()
-                arc.stroke()
-            }
+    /// Each dot an equal share, rounded; any use at all lights one, and critical lights them all.
+    static func litDots(percent: Double?, severity: Severity, of total: Int) -> Int {
+        if severity == .critical {
+            return total
+        }
+        guard let percent, percent.isFinite, percent > 0 else { return 0 }
+        return min(max(Int((percent / 100 * Double(total)).rounded()), 1), total)
+    }
 
-            colour.setFill()
-            if severity == .critical {
-                let bar = NSRect(x: centre.x - 0.85, y: centre.y - 0.6, width: 1.7, height: 4.2)
-                NSBezierPath(roundedRect: bar, xRadius: 0.85, yRadius: 0.85).fill()
-                NSBezierPath(ovalIn: NSRect(x: centre.x - 1, y: centre.y - 3.6, width: 2, height: 2)).fill()
-            } else {
-                let half: CGFloat = 3.1
-                let diamond = NSBezierPath()
-                diamond.move(to: NSPoint(x: centre.x, y: centre.y + half))
-                diamond.line(to: NSPoint(x: centre.x + half, y: centre.y))
-                diamond.line(to: NSPoint(x: centre.x, y: centre.y - half))
-                diamond.line(to: NSPoint(x: centre.x - half, y: centre.y))
-                diamond.close()
-                diamond.lineJoinStyle = .round
-                diamond.lineWidth = 0.8  // softens the corners, like SF Symbols' diamonds
-                diamond.fill()
-                colour.setStroke()
-                diamond.stroke()
+    static func image(rows: [Row]) -> NSImage {
+        let rows = rows.isEmpty ? [Row(percent: nil, severity: .normal, faded: false)] : rows
+        let tinted = rows.contains { $0.severity != .normal }
+        let single = rows.count == 1
+        let lines = single ? gridRows : rows.count
+        let image = NSImage(size: size, flipped: true) { rect in
+            let width = CGFloat(dots) * diameter + CGFloat(dots - 1) * gap
+            let height = CGFloat(lines) * diameter + CGFloat(lines - 1) * gap
+            // Snapped to the 2x pixel grid so every dot is drawn the same.
+            let x0 = ((rect.width - width) / 2 * 2).rounded() / 2
+            let y0 = ((rect.height - height) / 2 * 2).rounded() / 2
+            for line in 0..<lines {
+                let row = single ? rows[0] : rows[line]
+                // Black in a template becomes the menu bar's own colour.
+                let colour = row.severity.statusBarColor ?? (tinted ? .labelColor : .black)
+                let y = y0 + CGFloat(line) * (diameter + gap)
+                for column in 0..<dots {
+                    // Alone, the grid fills a column at a time, bottom to top; otherwise each row fills on its own.
+                    let isLit = single ? column * gridRows + (gridRows - 1 - line) < row.cells : column < row.lit
+                    // Unlit dots are faint enough that the lit ones read at a glance.
+                    let alpha: CGFloat = (isLit ? 1 : 0.3) * (row.faded ? 0.5 : 1)
+                    colour.withAlphaComponent(alpha).setFill()
+                    let x = x0 + CGFloat(column) * (diameter + gap)
+                    NSBezierPath(ovalIn: NSRect(x: x, y: y, width: diameter, height: diameter)).fill()
+                }
             }
             return true
         }
-        image.isTemplate = tint == nil
+        image.isTemplate = !tinted
+        // Redrawn each time, so the text colour follows the menu bar's appearance.
+        image.cacheMode = .never
         image.accessibilityDescription = "Usage limits"
         return image
     }
@@ -132,6 +154,7 @@ final class LimitRowView: NSView {
         percentLabel.font = .monospacedDigitSystemFont(ofSize: MenuMetrics.font.pointSize, weight: .medium)
         captionLabel.font = MenuMetrics.smallFont
         captionLabel.textColor = .secondaryLabelColor
+        captionLabel.lineBreakMode = .byTruncatingTail
         for view in [titleLabel, percentLabel, severityIcon, bar, captionLabel] {
             view.setAccessibilityElement(false)
             addSubview(view)
@@ -146,12 +169,17 @@ final class LimitRowView: NSView {
         fatalError("init(coder:) is not supported")
     }
 
+    /// One element for VoiceOver, with a composed label and value; its labels aren't separate stops.
+    override func accessibilityChildren() -> [Any]? {
+        []
+    }
+
     func update(row: LimitRow, stale: Bool, now: Date) {
         titleLabel.stringValue = row.title
         // Full-contrast text: the colour lives in the bar and the glyph, never in the digits.
         percentLabel.stringValue = Format.percent(row.percent)
 
-        if let name = row.severity.symbolName {
+        if row.percent != nil, let name = row.severity.symbolName {
             severityIcon.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
                 .withSymbolConfiguration(.init(pointSize: NSFont.smallSystemFontSize, weight: .semibold))
             severityIcon.contentTintColor = row.severity.barColor
@@ -166,7 +194,7 @@ final class LimitRowView: NSView {
         bar.configure(
             fraction: (row.percent ?? 0) / 100,
             elapsed: row.elapsedFraction(at: now),
-            color: stale ? .tertiaryLabelColor : row.severity.barColor
+            color: stale ? MenuColors.staleFill : row.severity.barColor
         )
         bar.toolTip = row.windowLength.map { _ in "The mark shows an even pace: how much of this window has passed." }
 
@@ -209,7 +237,7 @@ final class LimitRowView: NSView {
         }
         if !captionLabel.isHidden {
             let captionHeight = captionLabel.fittingSize.height
-            captionLabel.frame = NSRect(x: textX, y: y, width: width - textX - MenuMetrics.trailing, height: captionHeight)
+            captionLabel.frame = NSRect(x: textX, y: y, width: width - textX - MenuMetrics.trailing + MenuMetrics.textPadding, height: captionHeight)
             y += captionHeight
         }
         let height = ceil(y + Self.padding)
@@ -278,7 +306,7 @@ final class CapacityBarView: NSView {
 final class NoticeView: NSView {
     private let icon = NSImageView()
     private let textLabel = NSTextField(wrappingLabelWithString: "")
-    private let detailLabel = NSTextField(labelWithString: "")
+    private let detailLabel = NSTextField(wrappingLabelWithString: "")
 
     override var isFlipped: Bool { true }
 
@@ -312,6 +340,11 @@ final class NoticeView: NSView {
         fatalError("init(coder:) is not supported")
     }
 
+    /// One element for VoiceOver, with a composed label and value; its labels aren't separate stops.
+    override func accessibilityChildren() -> [Any]? {
+        []
+    }
+
     override func layout() {
         super.layout()
         layoutContent()
@@ -333,7 +366,9 @@ final class NoticeView: NSView {
         textLabel.frame = NSRect(x: x, y: 4, width: textWidth, height: textHeight)
         var y = 4 + textHeight
         if !detailLabel.isHidden {
-            let detailHeight = detailLabel.fittingSize.height
+            detailLabel.preferredMaxLayoutWidth = textWidth
+            let detailBounds = NSRect(x: 0, y: 0, width: textWidth, height: .greatestFiniteMagnitude)
+            let detailHeight = ceil(detailLabel.cell?.cellSize(forBounds: detailBounds).height ?? detailLabel.fittingSize.height)
             detailLabel.frame = NSRect(x: x, y: y + 1, width: textWidth, height: detailHeight)
             y += detailHeight + 1
         }
@@ -384,6 +419,7 @@ final class SectionHeaderView: NSView {
         logo.imageScaling = .scaleProportionallyUpOrDown
         logo.contentTintColor = .secondaryLabelColor
         titleLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
+        titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.textColor = .secondaryLabelColor
         for view in [logo, titleLabel] {
             view.setAccessibilityElement(false)
@@ -396,6 +432,11 @@ final class SectionHeaderView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
+    }
+
+    /// One element for VoiceOver, with a composed label and value; its labels aren't separate stops.
+    override func accessibilityChildren() -> [Any]? {
+        []
     }
 
     func update(title: String, logo image: NSImage?) {
@@ -419,7 +460,7 @@ final class SectionHeaderView: NSView {
         titleLabel.frame = NSRect(
             x: x - MenuMetrics.textPadding,
             y: (height - textHeight) / 2,
-            width: MenuMetrics.width - x - MenuMetrics.trailing,
+            width: MenuMetrics.width - x - MenuMetrics.trailing + 2 * MenuMetrics.textPadding,
             height: textHeight
         )
     }

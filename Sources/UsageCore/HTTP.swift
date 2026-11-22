@@ -22,7 +22,7 @@ enum HTTP {
 
     static func get(_ url: URL, headers: [String: String]) async throws -> Reply {
         var request = URLRequest(url: url)
-        request.setValue("claude-usage-bar", forHTTPHeaderField: "User-Agent")
+        request.setValue("LLMits", forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         for (field, value) in headers {
             request.setValue(value, forHTTPHeaderField: field)
