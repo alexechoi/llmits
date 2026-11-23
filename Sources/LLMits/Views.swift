@@ -389,14 +389,13 @@ enum ServiceLogo {
         if let image = cache[service] {
             return image
         }
-        let name: String? = switch service {
+        let name = switch service {
         case .claude: "claude-spark"
         case .chatGPT: "openai-blossom"
-        // No Cursor mark is bundled yet, so its header shows text only.
-        case .cursor: nil
+        case .cursor: "cursor-cube"
         }
         // Bundled by scripts/build-app.sh; absent under `swift run`, where headers show text only.
-        guard let name, let url = Bundle.main.url(forResource: name, withExtension: "svg"),
+        guard let url = Bundle.main.url(forResource: name, withExtension: "svg"),
               let image = NSImage(contentsOf: url)
         else { return nil }
         image.isTemplate = true

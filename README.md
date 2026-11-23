@@ -104,14 +104,14 @@ Running `./install.sh` from a clone builds and installs that checkout. While you
 | --- | --- |
 | `Sources/UsageCore` | Each service's logins, requests and responses (`Claude/`, `ChatGPT/`, `Cursor/`), the `UsageTracker` that decides what to fetch and show, and formatting. No AppKit, and unit-tested. |
 | `Sources/LLMits` | The menu bar item and its menu. |
-| `Support` | The app's `Info.plist`; its icon, as made in Icon Composer (`AppIcon.icon`) and compiled (`CompiledIcon`); and the Claude and OpenAI logos with their sources (`Logos`). |
+| `Support` | The app's `Info.plist`; its icon, as made in Icon Composer (`AppIcon.icon`) and compiled (`CompiledIcon`); and the Claude, OpenAI and Cursor logos with their sources (`Logos`). |
 | `scripts/build-app.sh` | Builds `build/LLMits.app`; `--install` also copies it to `~/Applications` and opens it. |
 | `scripts/build-icon.sh` | Compiles `AppIcon.icon` into `CompiledIcon` (needs Xcode 26 or later). Run it after changing the icon and commit the result, so the app builds without Xcode. |
 | `install.sh` | The one-line installer and uninstaller. |
 
 ## Disclaimer
 
-LLMits is unofficial and not affiliated with or endorsed by Anthropic or OpenAI. It's also not affiliated with Anysphere (Cursor) or xAI. It relies on undocumented endpoints, so it may stop working at any time. Claude and the Claude logo are trademarks of Anthropic; ChatGPT, Codex and the OpenAI logo are trademarks of OpenAI. The logos in [`Support/Logos`](Support/Logos) come from each company's own brand resources and aren't covered by the MIT licence.
+LLMits is unofficial and not affiliated with or endorsed by Anthropic or OpenAI. It's also not affiliated with Anysphere (Cursor) or xAI. It relies on undocumented endpoints, so it may stop working at any time. Claude and the Claude logo are trademarks of Anthropic; ChatGPT, Codex and the OpenAI logo are trademarks of OpenAI; Cursor and the Cursor logo are trademarks of Anysphere. The logos in [`Support/Logos`](Support/Logos) come from each company's own brand resources and aren't covered by the MIT licence.
 
 ## Licence
 
